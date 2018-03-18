@@ -10,6 +10,8 @@
 #include <TClass.h>
 #include <TGraph.h>
 
+#include <TGRSIUtilities.h>
+
 /// \cond CLASSIMP
 ClassImp(TNucleus)
 /// \endcond
@@ -482,6 +484,7 @@ bool TNucleus::LoadTransitionFile()
 
 	while(!getline(transfile, line).fail()) {
 		// printf("%i\t%s\n",counter++,line.c_str());
+                trim(line);
 		if(line.compare(0, 2, "//") == 0) {
 			continue;
 		}

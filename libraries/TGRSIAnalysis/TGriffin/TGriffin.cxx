@@ -175,7 +175,7 @@ Double_t TGriffin::GetEnergyNonlinearity(int chan, double energy)
    return 0.0;
 }
 
-void TGriffin::Print(Option_t*) const
+void TGriffin::Print(Option_t *opt) const
 {
    std::cout<<"Griffin Contains: "<<std::endl;
    std::cout<<std::setw(6)<<GetLowGainMultiplicity()<<" Low gain hits"<<std::endl;
@@ -199,6 +199,13 @@ void TGriffin::Print(Option_t*) const
             <<" Cross-talk Set?  Low gain: "<<IsCrossTalkSet(kLowGain)
             <<"   High gain: "<<IsCrossTalkSet(kHighGain)<<std::endl;
    std::cout<<std::setw(6)<<fCycleStart<<" cycle start"<<std::endl;
+   TString sopt(opt);
+   sopt.ToLower();
+   if(sopt.Contains("all")) {
+     for(size_t i=0;i<fGriffinLowGainHits.size();i++) {
+         fGriffinLowGainHits.at(i).Print();
+     }
+   } 
 }
 
 TGriffin& TGriffin::operator=(const TGriffin& rhs)

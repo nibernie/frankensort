@@ -22,4 +22,7 @@ inline size_t FindFileSize(const char* fname)
    return fsize;
 }
 
+
+void trim(std::string& line, const std::string & trimChars = " \f\n\r\t\v");
+
 #endif

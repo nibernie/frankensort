@@ -51,6 +51,10 @@ public:
 
    TH2* GetTH2() override { return this; }
 
+
+   int Write(const char *name=0, Int_t option=0, Int_t bufsize=0) const override;
+
+
 private:
    ClassDefOverride(GH2D, 1)
 };

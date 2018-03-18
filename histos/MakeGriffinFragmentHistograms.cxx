@@ -5,6 +5,7 @@
 
 #include "TGriffin.h"
 
+
 extern "C" void MakeFragmentHistograms(TRuntimeObjects& obj)
 {
    std::shared_ptr<const TFragment> frag = obj.GetFragment();
@@ -18,13 +19,18 @@ extern "C" void MakeFragmentHistograms(TRuntimeObjects& obj)
       }
 
       if((chan->GetClassType() == TGriffin::Class()) && (chan->GetMnemonic()->OutputSensor() == TMnemonic::kA)) {
-         obj.FillHistogram("griffin_energy", 8000, 0, 8000, frag->GetEnergy());
+         obj.FillHistogram("griffin_energy", 4000, 0, 2000, frag->GetEnergy());
 
-         obj.FillHistogram("grif_channel_charge", 65, 0, 65, frag->GetArrayNumber(), 10000, 0, 10000,
+         obj.FillHistogram("grif_channel_charge", 65, 0, 65, frag->GetArrayNumber(), 16000, 0, 16000,
                            frag->GetCharge());
 
-         obj.FillHistogram("grif_channel_energy", 65, 0, 65, frag->GetArrayNumber(), 10000, 0, 10000,
+         obj.FillHistogram("grif_channel_energy", 65, 0, 65, frag->GetArrayNumber(), 4000, 0, 2000,
                            frag->GetEnergy());
+
+           obj.FillHistogram("grif_channel_charge_name", 65, 0, 65, chan->GetName(), 
+                                                    16000, 0, 16000, frag->GetCharge());
+           obj.FillHistogram("grif_channel_energy_name", 65, 0, 65, chan->GetName(), 
+                                                    4000, 0, 2000, frag->GetEnergy());
       }
 
       frag->ClearTransients();

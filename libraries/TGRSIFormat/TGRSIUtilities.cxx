@@ -69,3 +69,21 @@ int GetSubRunNumber(const std::string& fileName)
    }
    return -1;
 }
+
+
+
+void trim(std::string& line, const std::string & trimChars) {
+   //Removes the the string "trimCars" from the start or end of 'line'
+  if(line.length() == 0)
+    return;
+
+  std::size_t found = line.find_first_not_of(trimChars);
+  if(found != std::string::npos)
+    line = line.substr(found, line.length());
+
+  found = line.find_last_not_of(trimChars);
+  if(found != std::string::npos)
+    line = line.substr(0, found + 1);
+}
+
+

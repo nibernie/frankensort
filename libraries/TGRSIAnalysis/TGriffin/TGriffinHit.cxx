@@ -42,6 +42,11 @@ void TGriffinHit::Copy(TObject& rhs) const
    static_cast<TGriffinHit&>(rhs).fCrystal             = fCrystal;
    static_cast<TGriffinHit&>(rhs).fPPG                 = fPPG;
    static_cast<TGriffinHit&>(rhs).fBremSuppressed_flag = fBremSuppressed_flag;
+   
+   if(TestHitBit(TGRSIDetectorHit::EBitFlag::kIsEnergySet)) {
+     static_cast<TGriffinHit&>(rhs).SetEnergy(GetEnergy());
+   }
+   
 }
 
 void TGriffinHit::Copy(TObject& obj, bool waveform) const
@@ -73,11 +78,12 @@ void TGriffinHit::Clear(Option_t* opt)
 void TGriffinHit::Print(Option_t*) const
 {
    // Prints the Detector Number, Crystal Number, Energy, Time and Angle.
-   printf("Griffin Detector: %i\n", GetDetector());
-   printf("Griffin Crystal:  %i\n", GetCrystal());
-   printf("Griffin Energy:   %lf\n", GetEnergy());
-   printf("Griffin hit time:   %lf\n", GetTime());
-   printf("Griffin hit TV3 theta: %.2f\tphi%.2f\n", GetPosition().Theta() * 180 / (3.141597),
+   printf("\tGriffin Detector: %i\n", GetDetector());
+   printf("\tGriffin Crystal:  %i\n", GetCrystal());
+   printf("\tGriffin Energy:   %lf\n", GetEnergy());
+   printf("\tGriffin E no CT:  %lf\n", GetNoCTEnergy());
+   printf("\tGriffin hit time:   %lf\n", GetTime());
+   printf("\tGriffin hit TV3 theta: %.2f\tphi%.2f\n", GetPosition().Theta() * 180 / (3.141597),
           GetPosition().Phi() * 180 / (3.141597));
 }
 

@@ -47,6 +47,7 @@ public:
    Short_t GetLowGainMultiplicity() const { return fGriffinLowGainHits.size(); }
    Short_t GetHighGainMultiplicity() const { return fGriffinHighGainHits.size(); }
    Short_t   GetMultiplicity() const override { return GetMultiplicity(GetDefaultGainType()); }
+   Short_t Size() const { return GetMultiplicity(); }
 
    static TVector3 GetPosition(int DetNbr, int CryNbr = 5, double dist = 110.0); //!<!
    static const char* GetColorFromNumber(Int_t number);
@@ -112,6 +113,30 @@ private:
    static Int_t fDefaultGainType;
 
 public:
+   
+   /////******  *********///////////
+   /////******  *********///////////
+   /////******  Added for the Cd Analysis! *********///////////
+   void SortHits() { std::sort(fGriffinLowGainHits.begin(),fGriffinLowGainHits.end()); 
+                     std::sort(fGriffinHighGainHits.begin(),fGriffinHighGainHits.end()); }
+   void CleanHits(Short_t k=649) {  
+     std::vector<TGriffinHit>::iterator it;
+     for(it=fGriffinLowGainHits.begin();it!=fGriffinLowGainHits.end(); ) {
+       if(it->GetKValue()==k) {
+         it++;
+       } else {
+         fGriffinLowGainHits.erase(it);
+       }
+     }
+     SortHits();
+
+   }
+   /////******  *********///////////
+   /////******  *********///////////
+   /////******  *********///////////
+                    
+
+
    static bool SetCoreWave() { return fSetCoreWave; } //!<!
    // static bool SetBGOHits()       { return fSetBGOHits;   }  //!<!
    // static bool SetBGOWave()      { return fSetBGOWave;   } //!<!
@@ -143,7 +168,6 @@ public:
    static void LoadEnergyResidual(int chan, TSpline* residual);
    static Double_t GetEnergyNonlinearity(int chan, double energy);
 
-private:
    // This is where the general untouchable functions live.
    std::vector<TGriffinHit>* GetHitVector(const Int_t& gain_type);      //!<!
    std::vector<TGriffinHit>* GetAddbackVector(const Int_t& gain_type);  //!<!

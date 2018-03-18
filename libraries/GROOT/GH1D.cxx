@@ -15,9 +15,11 @@
 #include "GH2I.h"
 #include "GH2D.h"
 
-GH1D::GH1D(const TH1& source) : parent(nullptr), projection_axis(-1)
+GH1D::GH1D(const TObject& source) : parent(nullptr), projection_axis(-1)
 {
-   source.Copy(*this);
+  if(source.InheritsFrom("TH1")) 
+    source.Copy(*this);
+
 }
 
 GH1D::GH1D(const TF1& function, Int_t nbinsx, Double_t xlow, Double_t xup)
@@ -96,8 +98,8 @@ void GH1D::Print(Option_t* opt) const
 void GH1D::Copy(TObject& obj) const
 {
    TH1D::Copy(obj);
-
-   static_cast<GH1D&>(obj).parent = parent;
+   if(obj.InheritsFrom("GH1D"))
+     static_cast<GH1D&>(obj).parent = parent;
 }
 
 void GH1D::Draw(Option_t* opt)
@@ -236,3 +238,16 @@ GH1D* GH1D::Project(int bins)
 
    return proj;
 }
+
+Int_t GH1D::Write(const char *name,Int_t option,Int_t bufsize) const {
+  TH1D hist;
+//hist.Copy(*this);
+  this->Copy(hist);
+  hist.SetNameTitle(this->GetName(),this->GetTitle());
+  
+  return hist.Write(name,option,bufsize);
+}
+
+
+
+

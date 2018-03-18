@@ -87,7 +87,7 @@ Float_t TGRSIDetectorHit::GetCharge() const
       return Charge();
    }
    if(fKValue > 0 && !channel->UseCalFileIntegration()) {
-      return Charge() / (static_cast<Float_t>(fKValue)); // this will use the integration value
+      return Charge() / (static_cast<Float_t>(fKValue/8.0)); // this will use the integration value    changed by pcb to get better dispersion
    }
    if(channel->UseCalFileIntegration()) {
       return Charge() / (static_cast<Float_t>(channel->GetIntegration())); // this will use the integration value
@@ -112,7 +112,7 @@ double TGRSIDetectorHit::GetEnergy(Option_t*) const
                                                        // in the TChannel if it exists.
    }
    if(fKValue > 0) {
-      double energy = channel->CalibrateENG(Charge(), static_cast<int>(fKValue));
+      double energy = channel->CalibrateENG(Charge(), static_cast<int>(fKValue/8.0));  //changed by pcb to get better dispersion!
       return SetEnergy(energy + GetEnergyNonlinearity(energy));
    }
    double energy = channel->CalibrateENG(Charge());

@@ -27,7 +27,7 @@ public:
 
    GH1D(const TF1& function, Int_t nbinsx, Double_t xlow, Double_t xup);
 
-   GH1D(const TH1& source);
+   GH1D(const TObject& source);
    // GH1D(const TH1 *source);
    // virtual void SetOption(Option_t* option=" ");
 
@@ -60,6 +60,9 @@ public:
    GH1D* Project(double value_low, double value_high) const;
    GH1D* Project_Background(double value_low, double value_high, double bg_value_low, double bg_value_high,
                             kBackgroundSubtraction mode = kRegionBackground) const;
+
+   int Write(const char *name=0, Int_t option=0, Int_t bufsize=0) const override;
+
 
 private:
    TRef parent;

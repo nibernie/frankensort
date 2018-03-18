@@ -137,12 +137,13 @@ void TGRSIint::ApplyOptions()
 
    SetupPipeline();
 
-   for(auto& filename : opt->MacroInputFiles()) {
-      RunMacroFile(filename);
-   }
 
    if(opt->StartGui()) {
       StartGUI();
+   }
+   
+   for(auto& filename : opt->MacroInputFiles()) {
+      RunMacroFile(filename);
    }
 
    std::cout<<StoppableThread::AllThreadHeader()<<std::endl;
@@ -193,7 +194,7 @@ void TGRSIint::Terminate(Int_t status)
    /// sends an error to TSortingDiagnostics if an analysis tree is being created
    if(!fAllowedToTerminate) {
       std::cout<<"Not allowed to terminate, sorry!"<<std::endl;
-      return;
+      //return;
    }
 
    StoppableThread::SendStop();
@@ -679,6 +680,7 @@ void TGRSIint::SetupPipeline()
 
 void TGRSIint::RunMacroFile(const std::string& filename)
 {
+ 
    /// Runs a macro file. This happens when --work-harder is used with a .C file
    if(file_exists(filename.c_str())) {
       const char* command = Form(".x %s;", filename.c_str());

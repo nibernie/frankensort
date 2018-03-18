@@ -42,6 +42,10 @@
 #include "TClass.h"
 #include "Globals.h"
 
+#include "TGRSIUtilities.h"
+
+#include "TSpline.h"
+
 class TChannel : public TNamed {
 public:
    static TChannel* GetChannel(unsigned int temp_address);
@@ -95,6 +99,11 @@ private:
    double               fEFFChi2;          // Chi2 of Efficiency calibration
    std::vector<double> fCTCoefficients; // Cross talk coefficients
 
+   std::vector<double>  fResidualValues;
+   std::vector<double>  fResidualEnergies;
+   TSpline3             fResSpline; 
+   bool                 fUseResiduals;
+
    struct WaveFormShapePar {
       bool   InUse;
       double BaseLine;
@@ -118,7 +127,11 @@ private:
    void SetEFFCoefficients(std::vector<double> tmp) { fEFFCoefficients = std::move(tmp); }
    void SetCTCoefficients(std::vector<double> tmp) { fCTCoefficients = std::move(tmp); }
 
-   static void trim(std::string*, const std::string& trimChars = " \f\n\r\t\v");
+   void SetResidualValues(std::vector<double> tmp) { fResidualValues = std::move(tmp); }
+   void SetResidualEnergies(std::vector<double> tmp) { fResidualEnergies = std::move(tmp); }
+
+
+   //static void trim(std::string*, const std::string& trimChars = " \f\n\r\t\v");
 
 public:
    void SetName(const char* tmpName) override;
@@ -144,6 +157,8 @@ public:
    void SetDetectorNumber(int tempint) { fDetectorNumber = tempint; }
    void SetSegmentNumber(int tempint) { fSegmentNumber = tempint; }
    void SetCrystalNumber(int tempint) { fCrystalNumber = tempint; }
+   
+   void SetUseResiduals(bool tmp) {fUseResiduals = tmp; }
 
    int              GetDetectorNumber() const;
    int              GetSegmentNumber() const;
@@ -179,12 +194,21 @@ public:
    std::vector<double>  GetEFFCoeff() const { return fEFFCoefficients; }
    std::vector<double>  GetCTCoeff() const { return fCTCoefficients; }
 
+   std::vector<double>   GetResidualValues() const { return fResidualValues; }
+   std::vector<double>  GetResidualEnergies() const { return fResidualEnergies; }
+   inline bool UseResiduals() const { return fUseResiduals; }
+
+
    inline void AddENGCoefficient(Float_t temp) { fENGCoefficients.push_back(temp); }
    inline void AddCFDCoefficient(double temp) { fCFDCoefficients.push_back(temp); }
    inline void AddLEDCoefficient(double temp) { fLEDCoefficients.push_back(temp); }
    inline void AddTIMECoefficient(double temp) { fTIMECoefficients.push_back(temp); }
    inline void AddEFFCoefficient(double temp) { fEFFCoefficients.push_back(temp); }
    inline void AddCTCoefficient(double temp) { fCTCoefficients.push_back(temp); }
+
+   inline void AddResEnergy(double temp) { fResidualEnergies.push_back(temp); }
+   inline void AddResValue(double temp) { fResidualValues.push_back(temp); }
+
 
    inline void SetENGChi2(double temp) { fENGChi2 = temp; }
    inline void SetCFDChi2(double temp) { fCFDChi2 = temp; }
@@ -242,6 +266,11 @@ public:
    void DestroyEFFCal();
    void DestroyCTCal();
 
+   void DestroyResEnergies();
+   void DestroyResValues();
+   void DestroyResiduals();
+   void MakeResidualSpline();
+
    static Int_t ReadCalFromCurrentFile(Option_t* opt = "overwrite");
    static Int_t ReadCalFromTree(TTree*, Option_t* opt = "overwrite");
    static Int_t ReadCalFromFile(TFile* tempf, Option_t* opt = "overwrite");
@@ -258,6 +287,7 @@ public:
    std::string PrintCTToString(Option_t* opt = "");
    void PrintCTCoeffs(Option_t* opt = "") const;
 
+   std::string PrintResToString(Option_t* opt = "");
    static int WriteToRoot(TFile* fileptr = nullptr);
 
 private:

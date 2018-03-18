@@ -77,6 +77,14 @@ TChannel::TChannel(TChannel* chan)
    SetCrystalNumber(chan->GetCrystalNumber());
    SetTimeOffset(chan->GetTimeOffset());
    SetClassType(chan->GetClassType());
+
+
+   SetResidualValues(chan->GetResidualValues());
+   SetResidualEnergies(chan->GetResidualEnergies());
+   SetUseResiduals(chan->UseResiduals());
+   if(UseResiduals()) { MakeResidualSpline(); }
+
+
 }
 
 void TChannel::SetName(const char* tmpName)
@@ -187,6 +195,12 @@ void TChannel::OverWriteChannel(TChannel* chan)
    SetCrystalNumber(chan->GetCrystalNumber());
    SetTimeOffset(chan->GetTimeOffset());
    SetClassType(chan->GetClassType());
+
+   SetResidualValues(chan->GetResidualValues());
+   SetResidualEnergies(chan->GetResidualEnergies());
+   SetUseResiduals(chan->UseResiduals());
+   if(UseResiduals()) { MakeResidualSpline(); }
+
 }
 
 void TChannel::AppendChannel(TChannel* chan)
@@ -262,6 +276,23 @@ void TChannel::AppendChannel(TChannel* chan)
    if(chan->GetCrystalNumber() > -1) {
       SetCrystalNumber(chan->GetCrystalNumber());
    }
+   
+   if(chan->GetResidualValues().size()>0) {
+     SetResidualValues(chan->GetResidualValues());
+   }
+   if(chan->GetResidualEnergies().size()>0) {
+     SetResidualEnergies(chan->GetResidualEnergies());
+   }
+   if(chan->UseResiduals()) { //check if the residual values have actually been set?
+     SetUseResiduals(true);
+     MakeResidualSpline();
+   }
+
+
+
+
+
+
 
    SetClassType(chan->GetClassType());
 }
@@ -323,6 +354,13 @@ void TChannel::Clear(Option_t*)
    fEFFChi2        = 0.0;
    fCTCoefficients.clear();
    fENGChi2        = 0.0;
+
+
+   fResidualValues.clear();
+   fResidualEnergies.clear();
+   fResSpline.Clear(); 
+   fUseResiduals=false;
+
 }
 
 TChannel* TChannel::GetChannel(unsigned int temp_address)
@@ -464,6 +502,24 @@ void TChannel::DestroyCalibrations()
    DestroyEFFCal();
    DestroyCTCal();
 }
+
+void TChannel::DestroyResEnergies() {
+  fResidualEnergies.clear();
+}
+
+void TChannel::DestroyResValues() {
+  fResidualValues.clear();
+}
+
+void TChannel::DestroyResiduals() {
+   fResidualValues.clear();
+   fResidualEnergies.clear();
+   fResSpline.Clear(); 
+   fUseResiduals=false;
+}
+
+
+
 
 double TChannel::CalibrateENG(int charge, int temp_int)
 {
@@ -741,6 +797,38 @@ std::string TChannel::PrintCTToString(Option_t*)
    return buffer;
 }
 
+std::string TChannel::PrintResToString(Option_t*) {
+  std::string buffer;
+   buffer.append("\n");
+   buffer.append(GetName());
+   buffer.append("\t{\n"); //,channelname.c_str();
+   buffer.append("Name:      ");
+   buffer.append(GetName());
+   buffer.append("\n");
+   buffer.append(Form("Number:    %d\n", fNumber));
+   buffer.append(Form("Address:   0x%08x\n", fAddress));
+   if(!fResidualEnergies.empty()) {
+      buffer.append("ResEng:  ");
+      for(double fResE : fResidualEnergies) {
+         buffer.append(Form("%f\t", fResE));
+      }
+      buffer.append("\n");
+      buffer.append("ResVal:  ");
+      for(double fResV : fResidualValues) {
+         buffer.append(Form("%f\t", fResV));
+      }
+      buffer.append("\n");
+      buffer.append("UseRes:  1\n");
+   }
+   buffer.append("}\n");
+
+   buffer.append("//====================================//\n");
+
+   return buffer;
+
+
+}
+
 std::string TChannel::PrintToString(Option_t*)
 {
    std::string buffer;
@@ -761,8 +849,13 @@ std::string TChannel::PrintToString(Option_t*)
    buffer.append(Form("Address:   0x%08x\n", fAddress));
    buffer.append(Form("Digitizer: %s\n", fDigitizerTypeString.c_str()));
    buffer.append("EngCoeff:  ");
+   int count=0;
    for(float fENGCoefficient : fENGCoefficients) {
-      buffer.append(Form("%f\t", fENGCoefficient));
+      if(count++>1) {
+        buffer.append(Form("%.*f\t",10,fENGCoefficient));
+      } else {
+        buffer.append(Form("%f\t", fENGCoefficient));
+      }
    }
    buffer.append("\n");
    buffer.append(Form("Integration: %d\n", fIntegration));
@@ -770,7 +863,7 @@ std::string TChannel::PrintToString(Option_t*)
    buffer.append(Form("ENGChi2:     %f\n", fENGChi2));
    buffer.append("EffCoeff:  ");
    for(double fEFFCoefficient : fEFFCoefficients) {
-      buffer.append(Form("%f\t", fEFFCoefficient));
+      buffer.append(Form("%.*f\t",10,fEFFCoefficient));
    }
    buffer.append("\n");
    buffer.append(Form("EFFChi2:   %f\n", fEFFChi2));
@@ -1072,7 +1165,7 @@ Int_t TChannel::ParseInputData(const char* inputdata, Option_t* opt)
    // the parser does not recognize, it just skips it!
    while(std::getline(infile, line)) {
       linenumber++;
-      trim(&line);
+      trim(line);
       size_t comment = line.find("//");
       if(comment != std::string::npos) {
          line = line.substr(0, comment);
@@ -1125,7 +1218,7 @@ Int_t TChannel::ParseInputData(const char* inputdata, Option_t* opt)
          if(ntype != std::string::npos) {
             std::string type = line.substr(0, ntype);
             line             = line.substr(ntype + 1, line.length());
-            trim(&line);
+            trim(line);
             std::istringstream ss(line);
             int                j = 0;
             while(type[j] != 0) {
@@ -1252,6 +1345,26 @@ Int_t TChannel::ParseInputData(const char* inputdata, Option_t* opt)
                double tempdbl;
                ss >> tempdbl;
                channel->SetWaveBaseLine(tempdbl);
+            } else if(type.compare("RESENG") == 0) {
+               channel->DestroyResEnergies();;
+               double value;
+               while(!(ss >> value).fail()) {
+                  channel->AddResEnergy(value);
+               }
+            } else if(type.compare("RESVAl") == 0) {
+               channel->DestroyResValues();
+               double value;
+               while(!(ss >> value).fail()) {
+                  channel->AddResValue(value);
+               }
+            } else if(type.compare("USERES") == 0) {
+               int tempstream;
+               ss >> tempstream;
+               if(tempstream > 0) {
+                  channel->SetUseResiduals(true);
+                  channel->MakeResidualSpline();
+               }
+
             } else {
             }
          }
@@ -1264,22 +1377,22 @@ Int_t TChannel::ParseInputData(const char* inputdata, Option_t* opt)
    return newchannels;
 }
 
-void TChannel::trim(std::string* line, const std::string& trimChars)
-{
-   /// Removes the the string "trimCars" from  the string 'line'
-   if(line->length() == 0) {
-      return;
-   }
-   std::size_t found = line->find_first_not_of(trimChars);
-   if(found != std::string::npos) {
-      *line = line->substr(found, line->length());
-   }
-   found = line->find_last_not_of(trimChars);
-   if(found != std::string::npos) {
-      *line = line->substr(0, found + 1);
-   }
-   return;
-}
+//void TChannel::trim(std::string* line, const std::string& trimChars)
+//{
+//   /// Removes the the string "trimCars" from  the string 'line'
+//   if(line->length() == 0) {
+//      return;
+//   }
+//   std::size_t found = line->find_first_not_of(trimChars);
+//   if(found != std::string::npos) {
+//      *line = line->substr(found, line->length());
+//   }
+//   found = line->find_last_not_of(trimChars);
+//   if(found != std::string::npos) {
+//      *line = line->substr(0, found + 1);
+//   }
+//   return;
+//}
 
 void TChannel::Streamer(TBuffer& R__b)
 {
@@ -1455,3 +1568,17 @@ int TChannel::GetCrystalNumber() const
    // printf("%s: %c\t%i\n",__PRETTY_FUNCTION__,color,fCrystalNumber);
    return fCrystalNumber;
 }
+
+void TChannel::MakeResidualSpline() {
+
+   //i am a thing!
+
+   fResSpline = TSpline3(Form("%s_residualspline",GetName()),fResidualEnergies.data(),fResidualValues.data(),fResidualEnergies.size(),"",0.,10000.);
+
+
+}
+
+
+
+
+
