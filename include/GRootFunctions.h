@@ -7,6 +7,8 @@ namespace GRootFunctions {
 
 Double_t LinFit(Double_t* dim, Double_t* par);
 Double_t QuadFit(Double_t* dim, Double_t* par);
+Double_t TriFit(Double_t* dim, Double_t* par);
+Double_t NonLinearFit(Double_t* dim, Double_t* par);
 
 Double_t PolyBg(Double_t* dim, Double_t* par, Int_t order);
 

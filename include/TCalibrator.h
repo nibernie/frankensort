@@ -42,8 +42,11 @@ public:
                double sigma=2.0,double threshold=0.05,bool rm_bg=false,double error=0.001);
 
   void UpdateTChannel(TChannel* channel);
+  void LogResults(TChannel* channel,const char *logfile="callog.txt");
 
   void Fit(int order=1,bool zerozero=false); 
+
+  int    GetNPar() const;
   double GetParameter(int i=0) const;
   double GetEffParameter(int i=0) const;
 
@@ -86,7 +89,7 @@ private:
 #endif
   std::vector<Peak> fPeaks;
 
-  TGraph fit_graph;
+  TGraphErrors fit_graph;
   TGraphErrors eff_graph;
   TGraphErrors res_graph;
   TF1    *linfit;

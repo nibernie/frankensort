@@ -60,14 +60,21 @@ bool TCalibrator::Check() const {
 
 void TCalibrator::Print(Option_t *opt) const {
   int counter=0;
+  TString sopt(opt);
   printf("\t%2senergy%10scent%10scalc%10sarea%7snuc%8sintensity\n","","","","","","");
   for(auto it:fPeaks) {
     double caleng = it.centroid*GetParameter(1)+GetParameter(0);
-    double pdiff  = std::abs(caleng-it.energy)/it.energy;
-    printf("%i:\t%7.02f%16.02f%8.2f%3s[%%%3.2f]%16.02f%8s%16.04f\n",
-            counter++,it.energy,it.centroid,caleng,"",pdiff*100.,
+    //double pdiff  = (std::abs(caleng-it.energy)/it.energy)*100.;
+    double pdiff  = std::abs(caleng-it.energy);
+    //printf("%i:\t%7.02f%16.02f%8.2f%3s[%%%3.2f]%16.02f%8s%16.04f\n",
+    //        counter++,it.energy,it.centroid,caleng,"",pdiff,
+    //        it.area,it.nucleus.c_str(),it.intensity);
+    printf("%i:\t%7.02f%16.02f%8.2f%3s[Res: %3.2f-keV]%16.02f%8s%16.04f\n",
+            counter++,it.energy,it.centroid,caleng,"",pdiff,
             it.area,it.nucleus.c_str(),it.intensity);
   }
+  if(sopt.Contains("fit") && linfit) 
+    linfit->Print();
   printf("-------------------------------\n");
 
   //for(auto it:all_fits) {
@@ -231,9 +238,35 @@ void TCalibrator::Fit(int order,bool zerozero) {
     linfit->SetParName(0,"A");
     linfit->SetParName(1,"B");
     linfit->SetParName(2,"C");
+  } else if(order==3) {
+    linfit = new TF1("linfit",GRootFunctions::TriFit,0,1,4);
+    linfit->SetParameter(0,0.0);
+    linfit->SetParameter(1,1.0);
+    linfit->SetParameter(2,0.0);
+    linfit->SetParameter(3,0.0);
+    linfit->SetParName(0,"A");
+    linfit->SetParName(1,"B");
+    linfit->SetParName(2,"C");
+    linfit->SetParName(3,"D");
+  } else if(order==4) {
+    linfit = new TF1("linfit",GRootFunctions::NonLinearFit,0,1,5);
+    linfit->SetParameter(0,0.0);
+    linfit->SetParameter(1,1.0);
+    linfit->SetParameter(2,0.0);
+    linfit->SetParameter(3,0.0);
+    linfit->SetParameter(4,0.0);
+    linfit->SetParName(0,"A");
+    linfit->SetParName(1,"B");
+    linfit->SetParName(2,"C");
+    linfit->SetParName(3,"D");
+    linfit->SetParName(4,"X");
+
+
   }
+  
   fit_graph.Fit(linfit);
   fit_graph.Print();
+
   Print();
 
 }
@@ -274,6 +307,12 @@ double TCalibrator::GetParameter(int i) const {
   return sqrt(-1);
 }
 
+int TCalibrator::GetNPar() const {
+  if(linfit) 
+    return linfit->GetNpar();
+  return -1;
+}
+
 double TCalibrator::GetEffParameter(int i) const {
   if(efffit)
     return efffit->GetParameter(i);
@@ -284,19 +323,23 @@ double TCalibrator::GetEffParameter(int i) const {
 TGraph &TCalibrator::MakeCalibrationGraph(bool zerozero) { //double min_fom) {
   std::vector<double> xvalues;
   std::vector<double> yvalues;
-  //std::vector<double> xerrors;
-  //std::vector<double> yerrors;
+  std::vector<double> xerrors;
+  std::vector<double> yerrors;
   if(zerozero) {
     xvalues.push_back(0.0);
     yvalues.push_back(0.0);
+    xerrors.push_back(1.0);
+    yerrors.push_back(0.0);
   }
 
   for(auto it:fPeaks) {
     xvalues.push_back(it.centroid);
     yvalues.push_back(it.energy);
+    xerrors.push_back( sqrt(TMath::Power(sqrt(it.area)/it.area,2) + TMath::Power(0.01,2)) * xvalues.back());
+    yerrors.push_back(0.0);
   }
   fit_graph.Clear();
-  fit_graph = TGraph(xvalues.size(),xvalues.data(),yvalues.data());
+  fit_graph = TGraphErrors(xvalues.size(),xvalues.data(),yvalues.data(),xerrors.data(),yerrors.data());
 
   return fit_graph;
 }
@@ -382,22 +425,21 @@ int TCalibrator::AddData(TH1 *data,TNucleus *source, double sigma,double thresho
     double peak = it.first;
     double eng  = it.second;
 
-    range = 0.02 * peak;
-    if(range < 8.)
-      range = 8.0;
+    range = 0.01 * peak;
+    if(range < 6.)
+      range = 6.0;
 
 
     //GPeak *fit = PhotoPeakFit(data,peak-range,peak+range/2.,"no-print");
-      GGaus *fit = GausFit(data,peak-range,peak+range/2.,"no-print");
+    GGaus *fit = GausFit(data,peak-range,peak+range/2.,"no-print");
 
-    peak = fit->GetCentroid();
+    //if(fabs(peak-fit->GetCentroid())>5) {
+    //  fit = GausFit(data,peak-range/2.,peak+range/4.,"no-print");
+    //}
     fit->Print();
-    //data_channels.push_back(fit->GetCentroid());
-    //data->GetListOfFunctions()->Remove(fit);
-    //peak_area[fit->GetCentroid()] = fit->GetSum();
-
-    //AddPeak(it.first,it.second,source->GetName(),peak_area.at(it.first),src_eng_int[it.second]);
+    
     AddPeak(fit->GetCentroid(),eng,source->GetName(),fit->GetSum(),src_eng_int[eng]);
+    //AddPeak(peak,eng,source->GetName(),fit->GetSum(),src_eng_int[eng]);
   }
 
   //Print();
@@ -660,6 +702,29 @@ bool TCalibrator::CheckMap(std::map<double,double> inmap) {
 
 
 void TCalibrator::UpdateTChannel(TChannel *channel) { }
+
+
+void TCalibrator::LogResults(TChannel *channel,const char *logfile) { 
+  
+  FILE *saved = stdout;
+  stdout = fopen(logfile,"a");
+
+  printf("====================================\n");
+  printf("====================================\n");
+
+  
+
+  printf("%s",channel->PrintToString().c_str());
+  Print("fit");
+  printf("====================================\n");
+  printf("====================================\n");
+  
+  fclose(stdout);
+  stdout=saved;
+
+  return;
+}
+
 
 
 void TCalibrator::AddPeak(double cent,double eng,std::string nuc,double a,double inten) {

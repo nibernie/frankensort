@@ -5,8 +5,7 @@ NamespaceImp(GRootFunctions)
 
 #define PI TMATH::Pi()
 
-   Double_t GRootFunctions::PolyBg(Double_t* dim, Double_t* par, Int_t order)
-{
+Double_t GRootFunctions::PolyBg(Double_t* dim, Double_t* par, Int_t order) {
    Double_t result = 0.0;
    int      j      = 0;
    for(Int_t i = 0; i <= order; i++) {
@@ -17,15 +16,26 @@ NamespaceImp(GRootFunctions)
    return result;
 }
 
-Double_t GRootFunctions::LinFit(Double_t* dim, Double_t* par)
-{
+Double_t GRootFunctions::LinFit(Double_t* dim, Double_t* par) {
    return PolyBg(dim, par, 1);
 }
 
-Double_t GRootFunctions::QuadFit(Double_t* dim, Double_t* par)
-{
+Double_t GRootFunctions::QuadFit(Double_t* dim, Double_t* par) {
    return PolyBg(dim, par, 2);
 }
+
+Double_t GRootFunctions::TriFit(Double_t* dim, Double_t* par) {
+   return PolyBg(dim, par, 3);
+}
+
+Double_t GRootFunctions::NonLinearFit(Double_t* dim, Double_t* par) {
+   return PolyBg(dim, par, 3) + *(par+4)*TMath::Power(dim[0],0.5);
+}
+
+
+
+
+
 
 Double_t GRootFunctions::StepFunction(Double_t* dim, Double_t* par)
 {

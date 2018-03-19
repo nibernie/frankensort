@@ -87,7 +87,8 @@ Float_t TGRSIDetectorHit::GetCharge() const
       return Charge();
    }
    if(fKValue > 0 && !channel->UseCalFileIntegration()) {
-      return Charge() / (static_cast<Float_t>(fKValue/8.0)); // this will use the integration value    changed by pcb to get better dispersion
+      //return Charge() / (static_cast<Float_t>(fKValue)/(4.0)); // this will use the integration value    changed by pcb to get better dispersion
+      return Charge() / (static_cast<Float_t>(fKValue)); // this will use the integration value    changed by pcb to get better dispersion
    }
    if(channel->UseCalFileIntegration()) {
       return Charge() / (static_cast<Float_t>(channel->GetIntegration())); // this will use the integration value
@@ -107,13 +108,14 @@ double TGRSIDetectorHit::GetEnergy(Option_t*) const
    }
    if(channel->UseCalFileIntegration()) {
       double energy = channel->CalibrateENG(Charge(), 0);
-      return SetEnergy(energy +
-                       GetEnergyNonlinearity(energy)); // this will use the integration value
-                                                       // in the TChannel if it exists.
+      return SetEnergy(energy); 
+                      // + GetEnergyNonlinearity(energy)); // this will use the integration value
+                                                           // in the TChannel if it exists.
    }
    if(fKValue > 0) {
-      double energy = channel->CalibrateENG(Charge(), static_cast<int>(fKValue/8.0));  //changed by pcb to get better dispersion!
-      return SetEnergy(energy + GetEnergyNonlinearity(energy));
+      //double energy = channel->CalibrateENG(Charge(), static_cast<int>(fKValue)/(4.0));  //changed by pcb to get better dispersion!
+      double energy = channel->CalibrateENG(Charge(), static_cast<int>(fKValue));  //changed by pcb to get better dispersion!
+      return SetEnergy(energy); // + GetEnergyNonlinearity(energy));
    }
    double energy = channel->CalibrateENG(Charge());
    return SetEnergy(energy + GetEnergyNonlinearity(energy));

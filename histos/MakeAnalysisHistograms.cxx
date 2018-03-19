@@ -35,6 +35,9 @@ extern "C" void MakeAnalysisHistograms(TRuntimeObjects& obj)
     obj.FillHistogram("summary",4000,0,2000,hit->GetEnergy(),
                                70,0,70,hit->GetArrayNumber());
 
+    obj.FillHistogram("runtime",3600,0,3600,hit->GetTimeStamp()/1e8,
+                               70,0,70,hit->GetArrayNumber());
+
     TChannel *chan = TChannel::GetChannel(hit->GetAddress());
     if(chan) 
     obj.FillHistogram("xtalmap",70,0,70,hit->GetArrayNumber(),
@@ -45,6 +48,9 @@ extern "C" void MakeAnalysisHistograms(TRuntimeObjects& obj)
 
     obj.FillHistogram(Form("xtali%02i_drif",hit->GetArrayNumber()),3000,0,3000,hit->GetTimeStamp()/1e8,
                                                                    500,1275,1525,hit->GetEnergy());
+
+    obj.FillHistogram("hitpattern_xtal",70,0,70,hit->GetArrayNumber());
+    //obj.FillHistogram("hitpattern_name",70,0,70,hit->GetName());
 
 
     if(lasttime.count(hit->GetArrayNumber())) {

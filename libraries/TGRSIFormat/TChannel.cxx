@@ -577,7 +577,16 @@ double TChannel::CalibrateENG(double charge)
       return charge;
    }
    double cal_chg = fENGCoefficients[0];
+   //ok... griffin is non-linear and this is causing havic in trying to line
+   //things up.  we are now going to take upto 5 energy coefficents where they
+   //go like a_n*x^n except number 5 - it will be a_5x^(1/2);
+
+
    for(size_t i = 1; i < fENGCoefficients.size(); i++) {
+      if(i==4) {
+        cal_chg += fENGCoefficients[i] * pow((charge), 0.5);
+        break;
+      }
       cal_chg += fENGCoefficients[i] * pow((charge), i);
    }
    return cal_chg;

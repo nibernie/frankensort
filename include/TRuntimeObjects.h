@@ -57,6 +57,13 @@ public:
    TH1* FillHistogram(const char* name, int bins, double low, double high, double value, double weight = 1);
    TH2* FillHistogram(const char* name, int Xbins, double Xlow, double Xhigh, double Xvalue, int Ybins, double Ylow,
                       double Yhigh, double Yvalue, double weight = 1);
+
+   TH2* FillHistogram(const char* name, int Xbins, double Xlow, double Xhigh, const char *namex, 
+                                        int Ybins, double Ylow, double Yhigh, double Yvalue, double weight = 1);
+   TH2* FillHistogram(const char* name, int Xbins, double Xlow, double Xhigh, double Xvalue, 
+                                        int Ybins, double Ylow, double Yhigh, const char *namey, double weight = 1);
+
+
    TProfile* FillProfileHist(const char* name, int Xbins, double Xlow, double Xhigh, double Xvalue, double Yvalue);
    TH2* FillHistogramSym(const char* name, int Xbins, double Xlow, double Xhigh, double Xvalue, int Ybins, double Ylow,
                          double Yhigh, double Yvalue);

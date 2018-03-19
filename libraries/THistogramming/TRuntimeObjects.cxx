@@ -80,6 +80,55 @@ TH2* TRuntimeObjects::FillHistogram(const char* name, int Xbins, double Xlow, do
    return hist;
 }
 
+TH2* TRuntimeObjects::FillHistogram(const char* name, int Xbins, double Xlow, double Xhigh, const char *namex, 
+                                                      int Ybins, double Ylow, double Yhigh, double Yvalue, double weight)
+{
+   TH2* hist = static_cast<TH2*>(GetObjects().FindObject(name));
+   if(hist == nullptr) {
+      hist = new GH2D(name, name, Xbins, Xlow, Xhigh, Ybins, Ylow, Yhigh);
+      if(fDirectory != nullptr) {
+         hist->SetDirectory(fDirectory);
+      }
+      GetObjects().Add(hist);
+   }
+   if( strlen(namex)>0   && !std::isnan(Yvalue)) {
+      hist->Fill(namex, Yvalue, weight);
+   }
+   return hist;
+}
+
+TH2* TRuntimeObjects::FillHistogram(const char* name, int Xbins, double Xlow, double Xhigh, double XValue, 
+                                                      int Ybins, double Ylow, double Yhigh, const char *namey, double weight)
+{
+   TH2* hist = static_cast<TH2*>(GetObjects().FindObject(name));
+   if(hist == nullptr) {
+      hist = new GH2D(name, name, Xbins, Xlow, Xhigh, Ybins, Ylow, Yhigh);
+      if(fDirectory != nullptr) {
+         hist->SetDirectory(fDirectory);
+      }
+      GetObjects().Add(hist);
+   }
+   if( strlen(namey)>0   && !std::isnan(XValue)) {
+      hist->Fill(XValue, namey, weight);
+   }
+   return hist;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 TProfile* TRuntimeObjects::FillProfileHist(const char* name, int Xbins, double Xlow, double Xhigh, double Xvalue,
                                            double Yvalue)
 {

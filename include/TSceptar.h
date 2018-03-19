@@ -35,6 +35,7 @@ public:
    void Copy(TObject& rhs) const override;
    TSceptarHit* GetSceptarHit(const int& i);                       //!<!
    Short_t GetMultiplicity() const override { return fSceptarHits.size(); } //!<!
+   Short_t Size() const { return GetMultiplicity(); } //!<!
 #ifndef __CINT__
    void AddFragment(const std::shared_ptr<const TFragment>&, TChannel*) override; //!<!
 #endif
