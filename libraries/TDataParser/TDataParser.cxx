@@ -14,6 +14,8 @@
 #include "TFragment.h"
 #include "TBadFragment.h"
 
+#include "TMidasEvent.h"
+
 TGRSIOptions* TDataParser::fOptions = nullptr;
 
 TDataParser::TDataParser()
@@ -401,6 +403,605 @@ bool TDataParser::SetTIGTimeStamp(uint32_t* data, const std::shared_ptr<TFragmen
 /////////////***************************************************************/////////////
 /////////////***************************************************************/////////////
 /////////////***************************************************************/////////////
+
+
+std::vector<uint32_t> TDataParser::CleanGriffinData(uint32_t *data, int size) {
+  //printf( RED "in clean hits!!!!!!" RESET_COLOR "\n");
+  std::vector<uint32_t> clean;
+  uint32_t last=0xffffffff;
+  for(int x=0;x<size;x++) {
+    int32_t current = *(data+x);
+    if(current==last) {
+   
+      //printf( BLUE "found:  0x%08x\t0x%08x" RESET_COLOR "\n",current,last);
+    }else if((current&0xffff0000)==0x11110000) {
+      //printf( DYELLOW "found:  0x%08x" RESET_COLOR "\n",current);
+    
+    }else {
+      clean.push_back(current);
+    }
+    last=current;
+  }
+  return clean;
+}
+
+
+
+std::vector<TFragment> TDataParser::GriffinDataToFragment(TMidasEvent *event) {
+
+
+   int   banksize;
+   void* ptr;
+   int   frags = 0;
+   EBank bank = kGRF2;
+
+   banksize= event->LocateBank(nullptr, "GRF2", &ptr);
+
+   uint32_t *data =(uint32_t*)ptr;
+   int size = banksize;
+   int midasSerialNumber = event->GetSerialNumber();
+   int midasTime = event->GetTimeStamp(); 
+
+   std::vector<TFragment> all_frags;
+
+
+   /// Converts a Griffin flavoured MIDAS file into a TFragment and returns the number of words processed (or the
+   /// negative index of the word it failed on)
+   std::shared_ptr<TFragment> eventFrag = std::make_shared<TFragment>();
+   //TFragment *eventFrag = new TFragment;
+   // no need to delete eventFrag, it's a shared_ptr and gets deleted when it goes out of scope
+   fFragmentHasWaveform = false;
+   fState               = EDataParserState::kGood;
+   int failedWord = -1; // Variable stores which word we failed on (if we fail). This is somewhat duplicate information
+                        // to fState, but makes things easier to track.
+   bool multipleErrors = false; // Variable to store if multiple errors occured parsing one fragment
+
+   if(fOptions == nullptr) {
+		fOptions = TGRSIOptions::Get();
+	}
+
+   int           x   = 0;
+   if(!SetGRIFHeader(data[x++], eventFrag, bank)) {
+      printf(DYELLOW "data[0] = 0x%08x" RESET_COLOR "\n", data[0]);
+		// we failed to get a good header, so we don't know which detector type this fragment would've belonged to
+      TParsingDiagnostics::Get()->BadFragment(-1); 
+      // this is the first word, so no need to check is the state/failed word has been set before
+      fState     = EDataParserState::kBadHeader;
+      failedWord = 0;
+   }
+
+   eventFrag->SetMidasTimeStamp(midasTime);
+   eventFrag->SetMidasId(midasSerialNumber);
+
+   // Changed on 11 Aug 2015 by RD to include PPG events. If the event has ModuleType 4 and address 0xffff, it is a PPG
+   // event.
+   if((eventFrag->GetModuleType() == 1 || eventFrag->GetModuleType() == 4) && eventFrag->GetAddress() == 0xffff) {
+     printf("ppg thing\n");
+     return all_frags;  
+     //return GriffinDataToPPGEvent(data, size, midasSerialNumber, midasTime);
+   }
+   // If the event has detector type 15 (0xf) it's a scaler event.
+   if(eventFrag->GetDetectorType() == 0xf) {
+      // a scaler event (trigger or deadtime) has 8 words (including header and trailer), make sure we have at least
+      // that much left
+      if(size < 8) {
+         if(fState == EDataParserState::kGood) {
+            fState     = EDataParserState::kMissingWords;
+            failedWord = x;
+         } else {
+            multipleErrors = true;
+         }
+         throw TDataParserException(fState, failedWord, multipleErrors);
+      }
+     printf("scaler thing\n");
+     return all_frags;  
+     // return GriffinDataToScalerEvent(data, eventFrag->GetAddress());
+   }
+
+   // The Network packet number is for debugging and is not always written to the midas file.
+   if(SetGRIFNetworkPacket(data[x], eventFrag)) {
+      ++x;
+   }
+
+   // The master Filter Pattern is in an unstable state right now and is not
+   // always written to the midas file
+   if(SetGRIFMasterFilterPattern(data[x], eventFrag, bank)) {
+      ++x;
+   }
+
+   // We can get multiple filter ids (one fragment can pass multiple filter conditions)
+   // so we have to loop until we don't find one
+   while(SetGRIFMasterFilterId(data[x], eventFrag)) {
+      ++x;
+   }
+
+   // The channel trigger ID is in an unstable state right now and is not
+   // always written to the midas file
+   if(!SetGRIFChannelTriggerId(data[x++], eventFrag)) {
+      TParsingDiagnostics::Get()->BadFragment(eventFrag->GetDetectorType());
+      if(fState == EDataParserState::kGood) {
+         fState     = EDataParserState::kBadTriggerId;
+         failedWord = x - 1; // -1 compensates the incrementation in the if-statement
+      } else {
+         multipleErrors = true;
+      }
+   }
+
+   // The Network packet number is for debugging and is not always written to
+   // the midas file.
+   if(SetGRIFNetworkPacket(data[x], eventFrag)) {
+      x++;
+   }
+
+   if(!SetGRIFTimeStampLow(data[x++], eventFrag)) {
+      TParsingDiagnostics::Get()->BadFragment(eventFrag->GetDetectorType());
+      if(fState == EDataParserState::kGood) {
+         fState     = EDataParserState::kBadLowTS;
+         failedWord = x - 1; // -1 compensates the incrementation in the if-statement
+      } else {
+         multipleErrors = true;
+      }
+   }
+
+   if(!SetGRIFDeadTime(data[x++], eventFrag)) {
+      TParsingDiagnostics::Get()->BadFragment(eventFrag->GetDetectorType());
+      if(fState == EDataParserState::kGood) {
+         fState     = EDataParserState::kBadHighTS;
+         failedWord = x - 1; // -1 compensates the incrementation in the if-statement
+      } else {
+         multipleErrors = true;
+      }
+   }
+
+   std::vector<Int_t>   tmpCharge;
+   std::vector<Short_t> tmpIntLength;
+   std::vector<Int_t>   tmpCfd;
+
+   for(; x < size; x++) {
+      uint32_t dword  = data[x];
+      uint32_t packet = dword >> 28;
+      uint32_t value  = dword & 0x0fffffff;
+
+      switch(packet) {
+      case 0x8: // The 8 packet type is for event headers
+         // if this happens, we have "accidentally" found another event.
+         // currently the GRIF-C only sets the master/slave port of the address for the first header (of the corrupt
+         // event)
+         // so we want to ignore this corrupt event and the next event which has a wrong address
+         TParsingDiagnostics::Get()->BadFragment(eventFrag->GetDetectorType());
+         if(fState == EDataParserState::kGood) {
+            fState     = EDataParserState::kSecondHeader;
+            failedWord = x + 1; //+1 to ensure we don't read this header as start of a good event
+         } else {
+            multipleErrors = true;
+         }
+         //Push(*fBadOutputQueue, std::make_shared<TBadFragment>(*eventFrag, data, size, failedWord, multipleErrors));
+         throw TDataParserException(fState, failedWord, multipleErrors);
+         break;
+      case 0xc: // The c packet type is for waveforms
+         if(!fNoWaveforms) {
+            SetGRIFWaveForm(value, eventFrag);
+         }
+         break;
+      case 0xd:
+         SetGRIFNetworkPacket(dword, eventFrag); // The network packet placement is not yet stable.
+         break;
+      case 0xe:
+         // changed on 21 Apr 2015 by JKS, when signal processing code from Chris changed the trailer.
+         // change should be backward-compatible
+         if((value & 0x3fff) == (eventFrag->GetChannelId() & 0x3fff)) {
+            if(!fOptions->SuppressErrors() && (eventFrag->GetModuleType() == 2) && (bank < kGRF3)) {
+               // check whether the nios finished and if so whether it finished with an error
+               if(((value >> 14) & 0x1) == 0x1) {
+                  if(((value >> 16) & 0xff) != 0) {
+                     printf(BLUE "0x%04x: NIOS code finished with error 0x%02x" RESET_COLOR "\n",
+                            eventFrag->GetAddress(), (value >> 16) & 0xff);
+                  }
+               }
+            }
+
+            if((eventFrag->GetModuleType() == 1) || (bank > kGRF2)) { // 4Gs have this only for banks newer than GRF2
+               eventFrag->SetAcceptedChannelId((value >> 14) & 0x3fff);
+            } else {
+               eventFrag->SetAcceptedChannelId(0);
+            }
+
+            // check the number of words the header said we should have with the number of words we've read
+            // the number of words is only set for bank >= GRF3
+            // if the fragment has a waveform, we can't compare the number of words
+            // the headers number of words includes the header (word 0) itself, so we need to compare to x plus one
+            if(eventFrag->GetNumberOfWords() > 0 && !eventFrag->HasWave() && eventFrag->GetNumberOfWords() != x + fOptions->WordOffset()) {
+               if(fState == EDataParserState::kGood) {
+                  fState     = EDataParserState::kWrongNofWords;
+                  failedWord = x;
+               } else {
+                  multipleErrors = true;
+               }
+               //Push(*fBadOutputQueue, std::make_shared<TBadFragment>(*eventFrag, data, size, failedWord, multipleErrors));
+               throw TDataParserException(fState, failedWord, multipleErrors);
+            }
+
+            // the way we insert the fragment(s) depends on the module type and bank:
+            // for module type 1 & bank GRF4, we can't insert the fragments yet, we need to put them in a separate queue
+            // for module type 2 (4G, all banks) and module type 1 & bank GRF3 we set the single charge, cfd, and
+            // IntLength, and insert the fragment
+            // for module type 1 & banks GRF1/GRF2 we loop over the charge, cfd, and IntLengths, and insert the
+            // (multiple) fragment(s)
+            // the last two cases can be treated the same since the second case will just have a single length charge,
+            // cfd, and IntLengths
+
+            // the first two cases can be treated the same way, so we only need to check for the third case
+            if(eventFrag->GetModuleType() == 1 && bank == kGRF4) {
+               if(tmpCfd.size() != 1) {
+                  if(fRecordDiag) {
+                     TParsingDiagnostics::Get()->BadFragment(eventFrag->GetDetectorType());
+                  }
+                  if(fState == EDataParserState::kGood) {
+                     fState     = EDataParserState::kNotSingleCfd;
+                     failedWord = x;
+                  } else {
+                     multipleErrors = true;
+                  }
+                  //Push(*fBadOutputQueue, std::make_shared<TBadFragment>(*eventFrag, data, size, failedWord, multipleErrors));
+                  throw TDataParserException(fState, failedWord, multipleErrors);
+               }
+               eventFrag->SetCfd(tmpCfd[0]);
+               if(fRecordDiag) {
+                  TParsingDiagnostics::Get()->GoodFragment(eventFrag);
+               }
+               //fFragmentMap.Add(eventFrag, tmpCharge, tmpIntLength);
+               return all_frags;
+            }
+            if(tmpCharge.size() != tmpIntLength.size() || tmpCharge.size() != tmpCfd.size()) {
+               if(fRecordDiag) {
+                  TParsingDiagnostics::Get()->BadFragment(eventFrag->GetDetectorType());
+               }
+               if(fState == EDataParserState::kGood) {
+                  fState     = EDataParserState::kSizeMismatch;
+                  failedWord = x;
+               } else {
+                  multipleErrors = true;
+               }
+               //Push(*fBadOutputQueue, std::make_shared<TBadFragment>(*eventFrag, data, size, failedWord, multipleErrors));
+               throw TDataParserException(fState, failedWord, multipleErrors);
+            }
+            for(size_t h = 0; h < tmpCharge.size(); ++h) {
+               eventFrag->SetCharge(tmpCharge[h]);
+               eventFrag->SetKValue(tmpIntLength[h]);
+               eventFrag->SetCfd(tmpCfd[h]);
+               if(fRecordDiag) {
+                  TParsingDiagnostics::Get()->GoodFragment(eventFrag);
+               }
+               if(fState == EDataParserState::kGood) {
+                  if(fOptions->ReconstructTimeStamp()) {
+                     fLastTimeStampMap[eventFrag->GetAddress()] = eventFrag->GetTimeStamp();
+                  }
+                  //Push(fGoodOutputQueues, std::make_shared<TFragment>(*eventFrag));
+                  all_frags.push_back(*eventFrag);
+                  eventFrag->Clear();
+               } else {
+                  if(fOptions->ReconstructTimeStamp() && fState == EDataParserState::kBadHighTS && !multipleErrors) {
+                     // std::cout<<"reconstructing timestamp from 0x"<<std::hex<<eventFrag->GetTimeStamp()<<" using
+                     // 0x"<<fLastTimeStampMap[eventFrag->GetAddress()];
+                     // reconstruct the high bits of the timestamp from the high bits of the last time stamp of the
+                     // same address
+                     if((eventFrag->GetTimeStamp() & 0x0fffffff) <
+                        (fLastTimeStampMap[eventFrag->GetAddress()] & 0x0fffffff)) {
+                        // we had a wrap-around of the low time stamp, so we need to set the high bits to the old
+                        // high bits plus one
+                        eventFrag->AppendTimeStamp(((fLastTimeStampMap[eventFrag->GetAddress()] >> 28) + 1)<<28);
+                     } else {
+                        eventFrag->AppendTimeStamp(fLastTimeStampMap[eventFrag->GetAddress()] & 0x3fff0000000);
+                     }
+                     // std::cout<<" => 0x"<<eventFrag->GetTimeStamp()<<std::dec<<std::endl;
+                     //Push(fGoodOutputQueues, std::make_shared<TFragment>(*eventFrag));
+                  all_frags.push_back(*eventFrag);
+                  eventFrag->Clear();
+                  } else {
+                     // std::cout<<"Can't reconstruct time stamp, "<<fOptions->ReconstructTimeStamp()<<",
+                     // state "<<fState<<" = "<<EDataParserState::kBadHighTS<<", "<<multipleErrors<<std::endl;
+                     //Push(*fBadOutputQueue, std::make_shared<TBadFragment>(*eventFrag, data, size, failedWord, multipleErrors));
+                  }
+               }
+            }
+            return all_frags;
+         } else {
+            if(fRecordDiag) {
+               TParsingDiagnostics::Get()->BadFragment(eventFrag->GetDetectorType());
+            }
+            if(fState == EDataParserState::kGood) {
+               fState     = EDataParserState::kBadFooter;
+               failedWord = x;
+            } else {
+               multipleErrors = true;
+            }
+            //Push(*fBadOutputQueue, std::make_shared<TBadFragment>(*eventFrag, data, size, failedWord, multipleErrors));
+            throw TDataParserException(fState, failedWord, multipleErrors);
+         }
+         break;
+      case 0xf:
+         switch(bank) {
+         case kGRF1: // format from before May 2015 experiments
+            TParsingDiagnostics::Get()->BadFragment(eventFrag->GetDetectorType());
+            if(fState == EDataParserState::kGood) {
+               fState     = EDataParserState::kFault;
+               failedWord = x;
+            } else {
+               multipleErrors = true;
+            }
+            //Push(*fBadOutputQueue, std::make_shared<TBadFragment>(*eventFrag, data, size, failedWord, multipleErrors));
+            throw TDataParserException(fState, failedWord, multipleErrors);
+            break;
+         case kGRF2: // from May 2015 to the end of 2015 0xf denoted a psd-word from a 4G
+            if(x + 1 < size) {
+               SetGRIFCc(value, eventFrag);
+               ++x;
+               dword = data[x];
+               SetGRIFPsd(dword, eventFrag);
+            } else {
+               TParsingDiagnostics::Get()->BadFragment(eventFrag->GetDetectorType());
+               if(fState == EDataParserState::kGood) {
+                  fState     = EDataParserState::kMissingPsd;
+                  failedWord = x;
+               } else {
+                  multipleErrors = true;
+               }
+               //Push(*fBadOutputQueue, std::make_shared<TBadFragment>(*eventFrag, data, size, failedWord, multipleErrors));
+               throw TDataParserException(fState, failedWord, multipleErrors);
+            }
+            break;
+         case kGRF3: // from 2016 on we're back to reserving 0xf for faults
+         case kGRF4:
+            TParsingDiagnostics::Get()->BadFragment(eventFrag->GetDetectorType());
+            if(fState == EDataParserState::kGood) {
+               fState     = EDataParserState::kFault;
+               failedWord = x;
+            } else {
+               multipleErrors = true;
+            }
+            //Push(*fBadOutputQueue, std::make_shared<TBadFragment>(*eventFrag, data, size, failedWord, multipleErrors));
+            throw TDataParserException(fState, failedWord, multipleErrors);
+            break;
+         default: printf("This bank not yet defined.\n"); break;
+         }
+         break;
+
+      default:
+         // these are charge/cfd words which are different depending on module type, and bank number/detector type
+         switch(eventFrag->GetModuleType()) {
+         case 1:
+            switch(bank) { // the GRIF-16 data format depends on the bank number
+            case kGRF1:    // bank's 1&2 have n*2 words with (5 high bits IntLength, 26 Charge)(5 low bits IntLength, 26
+                           // Cfd)
+            case kGRF2:
+               // read this pair of charge/cfd words, check if the next word is also a charge/cfd word
+               if(((data[x] & 0x80000000) == 0x0) && x + 1 < size && (data[x + 1] & 0x80000000) == 0x0) {
+                  Short_t tmp = (data[x] & 0x7c000000) >> 21; // 21 = 26 minus space for 5 low bits
+                  tmpCharge.push_back((data[x] & 0x03ffffff) | (((data[x] & 0x02000000) == 0x02000000)
+                                                                   ? 0xfc000000
+                                                                   : 0x0)); // extend the sign bit of 26bit charge word
+                  ++x;
+                  tmpIntLength.push_back(tmp | ((data[x] & 0x7c000000) >> 26));
+                  tmpCfd.push_back(data[x] & 0x03ffffff);
+               } else {
+                  TParsingDiagnostics::Get()->BadFragment(eventFrag->GetDetectorType());
+                  if(fState == EDataParserState::kGood) {
+                     fState     = EDataParserState::kMissingCfd;
+                     failedWord = x;
+                  } else {
+                     multipleErrors = true;
+                  }
+                  //Push(*fBadOutputQueue, std::make_shared<TBadFragment>(*eventFrag, data, size, failedWord, multipleErrors));
+                  throw TDataParserException(fState, failedWord, multipleErrors);
+               }
+               break;
+            case kGRF3: // bank 3 has 2 words with (5 high bits IntLength, 26 Charge)(9 low bits IntLength, 22 Cfd)
+               if(x + 1 < size &&
+                  (data[x + 1] & 0x80000000) == 0x0) {        // check if the next word is also a charge/cfd word
+                  Short_t tmp = (data[x] & 0x7c000000) >> 17; // 17 = 26 minus space for 9 low bits
+                  tmpCharge.push_back((data[x] & 0x03ffffff) | (((data[x] & 0x02000000) == 0x02000000)
+                                                                   ? 0xfc000000
+                                                                   : 0x0)); // extend the sign bit of 26bit charge word
+                  ++x;
+                  tmpIntLength.push_back(tmp | ((data[x] & 0x7fc00000) >> 22));
+                  tmpCfd.push_back(data[x] & 0x003fffff);
+                  break;
+               } else {
+                  TParsingDiagnostics::Get()->BadFragment(eventFrag->GetDetectorType());
+                  if(fState == EDataParserState::kGood) {
+                     fState     = EDataParserState::kMissingCfd;
+                     failedWord = x;
+                  } else {
+                     multipleErrors = true;
+                  }
+                  //Push(*fBadOutputQueue, std::make_shared<TBadFragment>(*eventFrag, data, size, failedWord, multipleErrors));
+                  throw TDataParserException(fState, failedWord, multipleErrors);
+               }
+               break;
+            case kGRF4: // bank 4 can have more than one integration (up to four), but these have to be combined with
+                        // other fragments/hits!
+               // we always have 2 words with (5 high bits IntLength, 26 Charge)(9 low bits IntLength, 22 Cfd)
+               if(x + 1 < size &&
+                  (data[x + 1] & 0x80000000) == 0x0) { // check if the next word is also a charge/cfd word
+                  Short_t tmp = ((data[x] & 0x7c000000) >> 17) |
+                                (((data[x] & 0x40000000) == 0x40000000) ? 0xc000 : 0x0); // 17 = 26 minus space for 9
+                                                                                         // low bits; signed, so we
+                                                                                         // extend the sign bit from 14
+                                                                                         // (31) to 16 bits
+                  if((data[x] & 0x02000000) == 0x02000000) {                             // overflow bit was set
+                     tmpCharge.push_back(std::numeric_limits<int>::max());
+                  } else {
+                     tmpCharge.push_back((data[x] & 0x01ffffff) |
+                                         (((data[x] & 0x01000000) == 0x01000000)
+                                             ? 0xfe000000
+                                             : 0x0)); // extend the sign bit of 25bit charge word
+                  }
+                  ++x;
+                  tmpIntLength.push_back(tmp | ((data[x] & 0x7fc00000) >> 22));
+                  tmpCfd.push_back(data[x] & 0x003fffff);
+                  // check if we have two more words (X & XI) with (8 num hits, 2 reserved, 14 IntLength2)(31 Charge2);
+                  // x has already been incremented once!
+                  if(x + 2 < size && (data[x + 1] & 0x80000000) == 0x0 && (data[x + 2] & 0x80000000) == 0x0) {
+                     ++x;
+                     tmpIntLength.push_back((data[x] & 0x3fff) | (((data[x] & 0x2000) == 0x2000) ? 0xc000 : 0x0));
+                     // eventFrag->SetNumberOfPileups((data[x] >> 16) & 0xff);
+                     ++x;
+                     if((data[x] & 0x02000000) == 0x02000000) { // overflow bit was set
+                        tmpCharge.push_back(std::numeric_limits<int>::max());
+                     } else {
+                        tmpCharge.push_back((data[x] & 0x01ffffff) |
+                                            (((data[x] & 0x01000000) == 0x01000000)
+                                                ? 0xfe000000
+                                                : 0x0)); // extend the sign bit of 25bit charge word
+                     }
+                     // check if we have two more words (XI & XIII) with (14 IntLength4, 2 reserved, 14 IntLength3)(31
+                     // Charge3); x has already been incremented thrice!
+                     if(x + 2 < size && (data[x + 1] & 0x80000000) == 0x0 && (data[x + 2] & 0x80000000) == 0x0) {
+                        ++x;
+                        tmpIntLength.push_back((data[x] & 0x3fff) | (((data[x] & 0x2000) == 0x2000) ? 0xc000 : 0x0));
+                        tmpIntLength.push_back((data[x] >> 16) |
+                                               (((data[x] & 0x20000000) == 0x20000000) ? 0xc000 : 0x0));
+                        ++x;
+                        if((data[x] & 0x02000000) == 0x02000000) { // overflow bit was set
+                           tmpCharge.push_back(std::numeric_limits<int>::max());
+                        } else {
+                           tmpCharge.push_back((data[x] & 0x01ffffff) |
+                                               (((data[x] & 0x01000000) == 0x01000000)
+                                                   ? 0xfe000000
+                                                   : 0x0)); // extend the sign bit of 25bit charge word
+                        }
+                        // check if we have one final word with (31 Charge4), otherwise remove the last integration
+                        // length (IntLength4)
+                        if(x + 1 < size && (data[x + 1] & 0x80000000) == 0x0) {
+                           ++x;
+                           if((data[x] & 0x02000000) == 0x02000000) { // overflow bit was set
+                              tmpCharge.push_back(std::numeric_limits<int>::max());
+                           } else {
+                              tmpCharge.push_back((data[x] & 0x01ffffff) |
+                                                  (((data[x] & 0x01000000) == 0x01000000)
+                                                      ? 0xfe000000
+                                                      : 0x0)); // extend the sign bit of 25bit charge word
+                           }
+                        } else {
+                           tmpIntLength.pop_back();
+                        }
+                     } else if((data[x + 1] & 0x80000000) == 0x0) { // 5 words
+                        ++x;
+                     }
+                  } else if((data[x + 1] & 0x80000000) == 0x0) { // 3 words
+                     ++x;
+                  }
+               } else {
+                  // these types of corrupt events quite often end without a trailer which leads to the header of the
+                  // next event missing the master/slave part of the address
+                  // so we look for the next trailer and stop there
+                  while(x < size && (data[x] & 0xf0000000) != 0xe0000000) {
+                     ++x;
+                  }
+                  TParsingDiagnostics::Get()->BadFragment(eventFrag->GetDetectorType());
+                  if(fState == EDataParserState::kGood) {
+                     fState     = EDataParserState::kMissingCharge;
+                     failedWord = x;
+                  } else {
+                     multipleErrors = true;
+                  }
+                  //Push(*fBadOutputQueue, std::make_shared<TBadFragment>(*eventFrag, data, size, failedWord, multipleErrors));
+                  throw TDataParserException(fState, failedWord, multipleErrors);
+               }
+               break;
+            default:
+               if(!fOptions->SuppressErrors()) {
+                  printf(DRED "Error, bank type %d not implemented yet" RESET_COLOR "\n", bank);
+               }
+               TParsingDiagnostics::Get()->BadFragment(eventFrag->GetDetectorType());
+               if(fState == EDataParserState::kGood) {
+                  fState     = EDataParserState::kBadBank;
+                  failedWord = x;
+               } else {
+                  multipleErrors = true;
+               }
+               //Push(*fBadOutputQueue, std::make_shared<TBadFragment>(*eventFrag, data, size, failedWord, multipleErrors));
+               throw TDataParserException(fState, failedWord, multipleErrors);
+               break;
+            }
+            break;
+         case 2:
+            // the 4G data format depends on the detector type, but the first two words are always the same
+            if(x + 1 < size && (data[x + 1] & 0x80000000) == 0x0) { // check if the next word is also a charge/cfd word
+               Short_t tmp = (data[x] & 0x7c000000) >> 21;          // 21 = 26 minus space for 5 low bits
+               tmpCharge.push_back((data[x] & 0x03ffffff) | (((data[x] & 0x02000000) == 0x02000000)
+                                                                ? 0xfc000000
+                                                                : 0x0)); // extend the sign bit of 26bit charge word
+               ++x;
+               tmpIntLength.push_back(tmp | ((data[x] & 0x7c000000) >> 26));
+               tmpCfd.push_back(data[x] & 0x03ffffff);
+            } else {
+               TParsingDiagnostics::Get()->BadFragment(eventFrag->GetDetectorType());
+               if(fState == EDataParserState::kGood) {
+                  fState     = EDataParserState::kMissingCfd;
+                  failedWord = x;
+               } else {
+                  multipleErrors = true;
+               }
+               //Push(*fBadOutputQueue, std::make_shared<TBadFragment>(*eventFrag, data, size, failedWord, multipleErrors));
+               throw TDataParserException(fState, failedWord, multipleErrors);
+            }
+            // for descant types (6,10,11) there are two more words for banks > GRF2 (bank GRF2 used 0xf packet and bank
+            // GRF1 never had descant)
+            if(bank > kGRF2 && (eventFrag->GetDetectorType() == 6 || eventFrag->GetDetectorType() == 10 ||
+                                eventFrag->GetDetectorType() == 11)) {
+               ++x;
+               if(x + 1 < size && (data[x + 1] & 0x80000000) == 0x0) {
+                  SetGRIFCc(value, eventFrag);
+                  ++x;
+                  dword = data[x];
+                  SetGRIFPsd(dword, eventFrag);
+               } else {
+                  TParsingDiagnostics::Get()->BadFragment(eventFrag->GetDetectorType());
+                  if(fState == EDataParserState::kGood) {
+                     fState     = EDataParserState::kMissingPsd;
+                     failedWord = x;
+                  } else {
+                     multipleErrors = true;
+                  }
+                  //Push(*fBadOutputQueue, std::make_shared<TBadFragment>(*eventFrag, data, size, failedWord, multipleErrors));
+                  throw TDataParserException(fState, failedWord, multipleErrors);
+               }
+            }
+            break;
+         default:
+            if(!fOptions->SuppressErrors()) {
+               printf(DRED "Error, module type %d not implemented yet" RESET_COLOR "\n", eventFrag->GetModuleType());
+            }
+            TParsingDiagnostics::Get()->BadFragment(eventFrag->GetDetectorType());
+            if(fState == EDataParserState::kGood) {
+               fState     = EDataParserState::kBadModuleType;
+               failedWord = x;
+            } else {
+               multipleErrors = true;
+            }
+            //Push(*fBadOutputQueue, std::make_shared<TBadFragment>(*eventFrag, data, size, failedWord, multipleErrors));
+            throw TDataParserException(fState, failedWord, multipleErrors);
+         } // switch(eventFrag->GetModuleType())
+         break;
+      } // switch(packet)
+   }    // for(;x<size;x++)
+
+   TParsingDiagnostics::Get()->BadFragment(eventFrag->GetDetectorType());
+   if(fState == EDataParserState::kGood) {
+      fState     = EDataParserState::kEndOfData;
+      failedWord = x;
+   } else {
+      multipleErrors = true;
+   }
+   //Push(*fBadOutputQueue, std::make_shared<TBadFragment>(*eventFrag, data, size, failedWord, multipleErrors));
+   throw TDataParserException(fState, failedWord, multipleErrors);
+   
+                  //all_frags.push_back(*eventFrag);
+                  //delete eventFrag;
+                  return all_frags;
+}
+
 
 int TDataParser::GriffinDataToFragment(uint32_t* data, int size, EBank bank, unsigned int midasSerialNumber,
                                        time_t midasTime)

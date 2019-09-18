@@ -79,7 +79,7 @@ std::string TEpicsFrag::GetEpicsVariableName(const int& i)
    try {
       return fNameList.at(i);
    } catch(const std::out_of_range& oor) {
-      std::cout<<DRED<<"Could not find variable at position "<<i<<", returning nothing"<<std::endl;
+      //std::cout<<DRED<<"Could not find variable at position "<<i<<", returning nothing"<<std::endl;
       return "";
    }
 }

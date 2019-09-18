@@ -313,8 +313,62 @@ static int readpipe(int fd, char* buf, int length)
 ///
 ///  EDITED FROM THE ORIGINAL TO RETURN TOTAL SUCESSFULLY BYTES READ INSTEAD OF TRUE/FALSE,  PCB
 ///
-int TMidasFile::Read(std::shared_ptr<TRawEvent> event)
+//
+//
+
+
+
+int TMidasFile::Read(TRawEvent *event) 
 {
+  if(event == nullptr) {
+      return -1;
+   }
+   TMidasEvent* midasEvent = (TMidasEvent*)event;
+   if(fReadBuffer.size() < sizeof(TMidas_EVENT_HEADER)) {
+      ReadMoreBytes(sizeof(TMidas_EVENT_HEADER) - fReadBuffer.size());
+   }
+
+   if(fReadBuffer.size() < sizeof(TMidas_EVENT_HEADER)) {
+      return 0;
+   }
+
+   midasEvent->Clear();
+   memcpy(reinterpret_cast<char*>(midasEvent->GetEventHeader()), fReadBuffer.data(), sizeof(TMidas_EVENT_HEADER));
+   if(fDoByteSwap) {
+      printf("Swapping bytes\n");
+      midasEvent->SwapBytesEventHeader();
+   }
+   if(!midasEvent->IsGoodSize()) {
+      fLastErrno = -1;
+      fLastError.assign("Invalid event size");
+      return 0;
+   }
+
+   size_t event_size = midasEvent->GetDataSize();
+   size_t total_size = sizeof(TMidas_EVENT_HEADER) + event_size;
+
+   if(fReadBuffer.size() < total_size) {
+      ReadMoreBytes(total_size - fReadBuffer.size());
+   }
+
+   if(fReadBuffer.size() < total_size) {
+      return 0;
+   }
+
+   memcpy(midasEvent->GetData(), fReadBuffer.data() + sizeof(TMidas_EVENT_HEADER), event_size);
+   midasEvent->SwapBytes(false);
+
+   size_t bytes_read = fReadBuffer.size();
+   fBytesRead += bytes_read;
+   currentEventNumber++;
+   fReadBuffer.clear();
+
+   return bytes_read;
+}
+
+
+int TMidasFile::Read(std::shared_ptr<TRawEvent> event) {
+
    if(event == nullptr) {
       return -1;
    }

@@ -242,7 +242,11 @@ int TMidasEvent::FindBank(const char* name, int* bklen, int* bktype, void** pdat
    } else {
       pbk = (TMidas_BANK*)(pbkh + 1);
       do {
-         if(name[0] == pbk->fName[0] && name[1] == pbk->fName[1] && name[2] == pbk->fName[2] &&
+         if(pbkh && pbk &&
+            pbk->fName && 
+            name[0] == pbk->fName[0] && 
+            name[1] == pbk->fName[1] && 
+            name[2] == pbk->fName[2] &&
             name[3] == pbk->fName[3]) {
             *pdata = pbk + 1;
             if(TID_SIZE[pbk->fType & 0xFF] == 0) {
@@ -757,12 +761,18 @@ int TMidasEvent::ProcessTIGRESS(uint32_t* ptr, int& dSize, TDataParser& parser)
 int TMidasEvent::ProcessGRIFFIN(uint32_t* ptr, int& dSize, TDataParser::EBank bank, TDataParser& parser)
 {
 	// loop over words in event to find fragment header
-	int totalFrags = 0;
+        //std::vector<uint32_t> clean_data = parser.CleanGriffinData(ptr,dSize);
+        //ptr = &clean_data[0];
+        //dSize = clean_data.size();
+
+        int totalFrags = 0;
+        int totalTry   = 0;
 	for(int index = 0; index < dSize;) {
 		if(((ptr[index]) & 0xf0000000) == 0x80000000) {
 			// if we found a fragment header we pass the data to the data parser which returns the number of words read
 			int words;
 			try {
+                                totalTry++;
 				words = parser.GriffinDataToFragment(&ptr[index], dSize - index, bank, GetSerialNumber(), GetTimeStamp());
 			} catch(TDataParserException& e) {
 				words = -e.GetFailedWord();
@@ -780,7 +790,7 @@ int TMidasEvent::ProcessGRIFFIN(uint32_t* ptr, int& dSize, TDataParser::EBank ba
 			} else {
 				// we failed to read the fragment on word <-words>, so advance the index by -words and we create an error
 				// message
-				++totalFrags; // if the midas bank fails, we assume it only had one frag in it... this is just used for a
+				//++totalFrags; // if the midas bank fails, we assume it only had one frag in it... this is just used for a
 				// print statement.
 				index -= words;
 
@@ -816,6 +826,11 @@ int TMidasEvent::ProcessGRIFFIN(uint32_t* ptr, int& dSize, TDataParser::EBank ba
 			++index;
 		}
 	}
+
+        //printf("\n\n");
+        //printf(BLUE "totalFrags = %i" RESET_COLOR "\n",totalFrags);
+        //printf(RED "totalTry   = %i" RESET_COLOR "\n",totalTry);
+        //printf("\n\n");
 
 	return totalFrags;
 }

@@ -15,11 +15,13 @@ void TUnpackedEvent::Build()
    for(const auto& frag : fFragments) {
       TChannel* channel = TChannel::GetChannel(frag->GetAddress());
       if(channel == nullptr) {
+         //frag->Print();
          continue;
       }
 
       TClass* detClass = channel->GetClassType();
       if(detClass == nullptr) {
+         //frag->Print();
          continue;
       }
 

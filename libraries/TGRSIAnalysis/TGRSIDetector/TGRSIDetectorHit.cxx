@@ -83,11 +83,15 @@ Double_t TGRSIDetectorHit::GetTime(const UInt_t&, Option_t*) const
 Float_t TGRSIDetectorHit::GetCharge() const
 {
    TChannel* channel = GetChannel();
+
+   //std::cout << std::hex << "0x" << channel << "  " << std::dec <<"Charge: " << Charge() << " / " << fKValue << " = " << Charge()/fKValue << std::endl;
    if(channel == nullptr) {
+     
       return Charge();
    }
-   if(fKValue > 0 && !channel->UseCalFileIntegration()) {
+   if(fKValue > 0 ) { //&& !channel->UseCalFileIntegration()) {
       //return Charge() / (static_cast<Float_t>(fKValue)/(4.0)); // this will use the integration value    changed by pcb to get better dispersion
+      
       return Charge() / (static_cast<Float_t>(fKValue)); // this will use the integration value    changed by pcb to get better dispersion
    }
    if(channel->UseCalFileIntegration()) {
@@ -106,16 +110,16 @@ double TGRSIDetectorHit::GetEnergy(Option_t*) const
       // Error("GetEnergy","No TChannel exists for address 0x%08x",GetAddress());
       return SetEnergy(static_cast<Double_t>(Charge()));
    }
+   if(fKValue > 0) {
+      //double energy = channel->CalibrateENG(Charge(), static_cast<int>(fKValue)/(4.0));  //changed by pcb to get better dispersion!
+      double energy = channel->CalibrateENG(Charge(), static_cast<int>(fKValue));  //changed by pcb to get better dispersion!
+      return SetEnergy(energy); // + GetEnergyNonlinearity(energy));
+   }
    if(channel->UseCalFileIntegration()) {
       double energy = channel->CalibrateENG(Charge(), 0);
       return SetEnergy(energy); 
                       // + GetEnergyNonlinearity(energy)); // this will use the integration value
                                                            // in the TChannel if it exists.
-   }
-   if(fKValue > 0) {
-      //double energy = channel->CalibrateENG(Charge(), static_cast<int>(fKValue)/(4.0));  //changed by pcb to get better dispersion!
-      double energy = channel->CalibrateENG(Charge(), static_cast<int>(fKValue));  //changed by pcb to get better dispersion!
-      return SetEnergy(energy); // + GetEnergyNonlinearity(energy));
    }
    double energy = channel->CalibrateENG(Charge());
    return SetEnergy(energy + GetEnergyNonlinearity(energy));

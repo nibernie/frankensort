@@ -34,7 +34,8 @@ private:
 
 public:
 	TNucleus() {};               // Should not be use, here so we can write things to a root file.
-	TNucleus(const char* name); // Creates a nucleus based on symbol and sets all parameters from mass.dat
+	//TNucleus(const char* name); // Creates a nucleus based on symbol and sets all parameters from mass.dat
+	TNucleus(const char* name, const char *sou_file=""); // Creates a nucleus based on symbol and sets all parameters from mass.dat
 	TNucleus(int charge, int neutrons, double mass, const char* symbol); // Creates a nucleus with Z, N, mass, and symbol
 	TNucleus(
 			int charge, int neutrons,
@@ -85,6 +86,7 @@ public:
 	void WriteSourceFile(const std::string& outfilename = "");
 
 	const TList* GetTransitionList() const { return &TransitionList; }
+	bool  LoadTransitionFile(const char *filename);
 
 private:
 	void SetName(const char* c = "") override;

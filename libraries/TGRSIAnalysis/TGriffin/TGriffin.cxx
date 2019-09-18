@@ -412,18 +412,20 @@ void TGriffin::AddFragment(const std::shared_ptr<const TFragment>& frag, TChanne
    }
    if(chan->GetMnemonic()->OutputSensor() == TMnemonic::kA) {
    }
-
+   //printf(YELLOW); frag->Print(); printf(RESET_COLOR);
    switch(chan->GetMnemonic()->SubSystem()) {
    case TMnemonic::kG:
       TGriffinHit geHit(*frag);
       switch(chan->GetMnemonic()->OutputSensor()) {
-      case TMnemonic::kA: GetHitVector(kLowGain)->push_back(std::move(geHit)); break;
+      case TMnemonic::kA: GetHitVector(kLowGain)->push_back(std::move(geHit)); break; //geHit.Print();  break;
       case TMnemonic::kB: GetHitVector(kHighGain)->push_back(std::move(geHit)); break;
       };
       //     case TMnemonic::kS :
       // do supressor stuff in the future
       //      break;
    };
+   //printf("\n\n");
+
 }
 
 TVector3 TGriffin::GetPosition(int DetNbr, int CryNbr, double dist)

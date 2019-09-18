@@ -37,7 +37,11 @@ public:
 
   int AddData(TH1* source_data, std::string source,
                double sigma=2.0,double threshold=0.05,bool rm_bg=false,double error=0.001);
- 
+
+  int AddData(TH1* source_data, std::string source, std::string gammalist,
+               double sigma=2.0,double threshold=0.05,bool rm_bg=false,double error=0.001);
+
+
   int AddData(TH1* source_data, TNucleus* source,
                double sigma=2.0,double threshold=0.05,bool rm_bg=false,double error=0.001);
 
@@ -55,10 +59,13 @@ public:
     double energy;
     double area;
     double intensity;
+    double low;
+    double high;
+    double chisq;
     std::string nucleus;
   };
 
-  void AddPeak(double cent,double eng,std::string nuc,double a=0.0,double inten=0.0);
+  void AddPeak(double cent,double eng,std::string nuc,double a=0.0,double inten=0.0,double low=-1,double high=-1, double chisq=-1);
   Peak GetPeak(UInt_t i) const { return fPeaks.at(i); }
  
   TH1 *ApplyCalibration(TH1 *source,int bins=8000,double range=4000,Option_t *opt="") const; 
@@ -81,6 +88,11 @@ public:
   //  TGraph graph;
   //};
 #endif
+
+  static TGraphErrors *SumEfficiencies(TGraphErrors *g1,TGraphErrors *g2); 
+  static TGraphErrors *CombineEfficiencies(TGraphErrors *orignal, TGraphErrors *other, double scale=1.0);
+  static TF1 *FitAndPrintEfficiencies(TGraphErrors *graph);
+  static void SaveEffGraph(TGraphErrors *graph,std::string datafile="",std::string fitfile=""); 
 
 private:
 #ifndef __CINT__

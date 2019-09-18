@@ -69,9 +69,17 @@ void TCalibrator::Print(Option_t *opt) const {
     //printf("%i:\t%7.02f%16.02f%8.2f%3s[%%%3.2f]%16.02f%8s%16.04f\n",
     //        counter++,it.energy,it.centroid,caleng,"",pdiff,
     //        it.area,it.nucleus.c_str(),it.intensity);
-    printf("%i:\t%7.02f%16.02f%8.2f%3s[Res: %3.2f-keV]%16.02f%8s%16.04f\n",
-            counter++,it.energy,it.centroid,caleng,"",pdiff,
-            it.area,it.nucleus.c_str(),it.intensity);
+    //
+    if(sopt.Contains("v")) {
+      printf("%i:\t%7.02f%16.02f%8.2f%3s[Res: %3.2f-keV]%16.02f%8s%16.04f %8s%16.04f %8s%16.04f %8s%16.04f\n",
+              counter++,it.energy,it.centroid,caleng,"",pdiff,
+              it.area,it.nucleus.c_str(),it.intensity,"",it.low,"",it.high,"",it.chisq );
+
+    } else {
+      printf("%i:\t%7.02f%16.02f%8.2f%3s[Res: %3.2f-keV]%16.02f%8s%16.04f\n",
+              counter++,it.energy,it.centroid,caleng,"",pdiff,
+              it.area,it.nucleus.c_str(),it.intensity);
+    }
   }
   if(sopt.Contains("fit") && linfit) 
     linfit->Print();
@@ -131,7 +139,7 @@ TGraphErrors &TCalibrator::MakeEffGraph(double seconds,double bq,Option_t *opt) 
     error_e.push_back(0.0);
     //observed.push_back((it.area/seconds) / ((it.intensity/100)*bq) );
     observed.push_back(it.area / ((it.intensity/100)*bq*seconds)  );
-    error_o.push_back( observed.back() * (sqrt(it.area)/it.area) );
+    error_o.push_back( observed.back() * (sqrt(it.area)/it.area) + observed.back()*0.02);
   }
 
   eff_graph.Clear();
@@ -191,6 +199,90 @@ bool TCalibrator::SaveEffGraph(std::string datafile,std::string fitfile) {
   return true;
 
 }
+
+void TCalibrator::SaveEffGraph(TGraphErrors *graph,std::string datafile,std::string fitfile) { 
+  if(!graph->GetListOfFunctions()->GetSize())
+    return;
+  TF1 *fit = (TF1*)graph->GetListOfFunctions()->At(0);
+
+  if(datafile.length()==0)
+    datafile = Form("%s_data.dat",graph->GetName());
+  if(fitfile.length()==0)
+    fitfile = Form("%s_fit.dat",graph->GetName());
+
+  std::ofstream outfile;
+  outfile.open(datafile.c_str());
+  for(int i=0;i<graph->GetN();i++) {
+     double x,y;
+     graph->GetPoint(i,x,y);
+     outfile << x << "\t" << y << "\t" << graph->GetErrorY(i) << std::endl;
+  }
+  outfile << std::endl;
+  outfile.close();
+
+  outfile.open(fitfile.c_str());
+  double xmin,xmax;
+  fit->GetRange(xmin,xmax);
+  double range = xmax-xmin;
+  while(xmin<xmax) {
+    outfile << xmin << "\t" << fit->Eval(xmin) << std::endl;
+    xmin += range/10000.;
+  }
+  outfile << std::endl;
+  outfile.close();
+  return ;
+
+
+}
+
+TGraphErrors *TCalibrator::CombineEfficiencies(TGraphErrors *orignal, TGraphErrors *other, double scale) {  
+
+  std::vector<double> xvals;
+  std::vector<double> yvals;
+  std::vector<double> xerr;
+  std::vector<double> yerr;
+
+  TGraphErrors *g1 = orignal; //(TGraphErrors*)cal1->EffGraph();
+  TGraphErrors *g2 = other;   //(TGraphErrors*)cal2->EffGraph();
+  for(int x1=0;x1<g1->GetN();x1++) {
+    xvals.push_back((*(g1->GetX()+x1)));
+    yvals.push_back((*(g1->GetY()+x1)));
+    xerr.push_back((*(g1->GetEX()+x1)));
+    yerr.push_back((*(g1->GetEY()+x1)));
+  }  
+  for(int x2=0;x2<g2->GetN();x2++) {
+    xvals.push_back((*(g2->GetX()+x2)));
+    yvals.push_back((*(g2->GetY()+x2))*scale);
+    xerr.push_back((*(g2->GetEX()+x2))*scale);
+    yerr.push_back((*(g2->GetEY()+x2))*scale);
+  
+  }
+  
+  TGraphErrors *combined = new TGraphErrors(xvals.size(),xvals.data(),yvals.data(),xerr.data(),yerr.data()); 
+  combined->SetNameTitle("combined",Form("%s + %s",g1->GetTitle(),g2->GetTitle()));
+  return combined;
+
+}
+
+TF1 *TCalibrator::FitAndPrintEfficiencies(TGraphErrors *graph) { 
+
+  static int counter=0;
+  TF1 *fit = new TF1(Form("eff_fit_%i",counter++),GRootFunctions::GammaEff,0,4000,4);
+
+  new GCanvas;
+  graph->Fit(fit,""); //fitopt.Data());
+  graph->Draw("AP");
+  
+  printf("results for %s\n",graph->GetName());
+  for(int  i=0;i<graph->GetN();i++) {
+    printf("%i)  [%.1f] Observed  = %.04f  | Calculated = %.04f  |  per diff = %.2f\n",
+            i,*(graph->GetX()+i),*(graph->GetY()+i),fit->Eval(*(graph->GetX()+i)), 
+            std::abs(*(graph->GetY()+i)-fit->Eval(*(graph->GetX()+i)))*100.); 
+  }
+  return fit;
+}
+
+
 
 
 void TCalibrator::Clear(Option_t *opt) {
@@ -353,8 +445,18 @@ int TCalibrator::AddData(TH1 *data,std::string source, double sigma,double thres
     return 0;
   }
   TNucleus n(source.c_str());
-  return AddData(data,&n,sigma,threshold,error);
+  return AddData(data,&n,sigma,threshold,rm_bg,error);
 }
+
+int TCalibrator::AddData(TH1 *data,std::string source, std::string sou_file, double sigma,double threshold,bool rm_bg,double error) {
+  if(!data || !source.length()) {
+    printf("data not added. data = %p \t source = %s\n",(void*)data,source.c_str());
+    return 0;
+  }
+  TNucleus n(source.c_str(),sou_file.c_str());
+  return AddData(data,&n,sigma,threshold,rm_bg,error);
+}
+
 
 int TCalibrator::AddData(TH1 *data,TNucleus *source, double sigma,double threshold,bool rm_bg,double error) {
   if(!data || !source) {
@@ -387,9 +489,15 @@ int TCalibrator::AddData(TH1 *data,TNucleus *source, double sigma,double thresho
   TSpectrum spectrum;
   if(rm_bg) {
     //data    = (TH1*)data->Clone(Form("%s_clone",data->GetName()));
-     TH1 *bg = spectrum.Background(data,20,"Compton");
+     TH1 *bg = spectrum.Background(data,4,"Compton");
+     std::cout << "subtracting bg!" << std::endl ;
+     std::cout<< "data: " << data->Integral() << std::endl;
+     std::cout<< "bg: "   << bg->Integral() << std::endl;
+     
      data->Add(bg,-1);
+     std::cout<< "data: " << data->Integral() << std::endl;
   }
+
   spectrum.Search(data,sigma,"",threshold);
   while(spectrum.GetNPeaks()>10) {
     spectrum.Clear();
@@ -400,6 +508,7 @@ int TCalibrator::AddData(TH1 *data,TNucleus *source, double sigma,double thresho
   std::vector<double> peak_positions;
   //std::map<double,double> peak_area;;
   //std::vector<double> data;
+  //printf("found %i peaks\n",spectrum.GetNPeaks()); fflush(stdout);
   for(int x=0;x<spectrum.GetNPeaks();x++) {
     //double range = 8*data->GetXaxis()->GetBinWidth(1);
     //printf(DGREEN "\tlow %.02f \t high %.02f" RESET_COLOR "\n",spectrum.GetPositionX()[x]-range,spectrum.GetPositionX()[x]+range);
@@ -408,12 +517,12 @@ int TCalibrator::AddData(TH1 *data,TNucleus *source, double sigma,double thresho
     //data_channels.push_back(fit->GetCentroid());
     //data->GetListOfFunctions()->Remove(fit);
     //peak_area[fit->GetCentroid()] = fit->GetSum();
-
+    //printf("%i peak at %.02f\n",x,spectrum.GetPositionX()[x]); fflush(stdout); 
     peak_positions.push_back(spectrum.GetPositionX()[x]);
 
 
   }
-
+  //printf("i am here!\n"); fflush(stdout);
 
   //std::map<double,double> datatosource = Match(data_channels,source_energy);;
   std::map<double,double> datatosource = Match(peak_positions,source_energy);;
@@ -426,19 +535,19 @@ int TCalibrator::AddData(TH1 *data,TNucleus *source, double sigma,double thresho
     double eng  = it.second;
 
     range = 0.01 * peak;
-    if(range < 6.)
-      range = 6.0;
+    if(range < 5.)
+      range = 5.0;
 
-
-    //GPeak *fit = PhotoPeakFit(data,peak-range,peak+range/2.,"no-print");
-    GGaus *fit = GausFit(data,peak-range,peak+range/2.,"no-print");
-
-    //if(fabs(peak-fit->GetCentroid())>5) {
-    //  fit = GausFit(data,peak-range/2.,peak+range/4.,"no-print");
-    //}
+    data->GetXaxis()->SetRangeUser(peak-(2*range),peak+range);
+    //data->GetListOfFunctions()->Clear();
+    GPeak *fit = PhotoPeakFit(data,peak-range,peak+range/2.,"no-print");
+    //GGaus *fit = GausFit(data,peak-range,peak+range/2.,"no-print");
+    double sum=0.0;
+    //sum = fit->GetSum();
+    sum = fit->GetArea();
     fit->Print();
     
-    AddPeak(fit->GetCentroid(),eng,source->GetName(),fit->GetSum(),src_eng_int[eng]);
+    AddPeak(fit->GetCentroid(),eng,source->GetName(),sum,src_eng_int[eng],peak-range,peak+range/2.,fit->GetChisquare());
     //AddPeak(peak,eng,source->GetName(),fit->GetSum(),src_eng_int[eng]);
   }
 
@@ -727,13 +836,17 @@ void TCalibrator::LogResults(TChannel *channel,const char *logfile) {
 
 
 
-void TCalibrator::AddPeak(double cent,double eng,std::string nuc,double a,double inten) {
+void TCalibrator::AddPeak(double cent,double eng,std::string nuc,double a,double inten,double low, double high, double chisq) {
   Peak p;
   p.centroid = cent;
   p.energy   = eng;
   p.nucleus  = nuc;
   p.area     = a;
   p.intensity = inten;
+  p.low  = low;
+  p.high = high;
+  p.chisq = chisq;
+
   fPeaks.push_back(p);
   return;
 }
@@ -761,6 +874,43 @@ TH1 *TCalibrator::ApplyCalibration(TH1 *source,int bins,double range,Option_t *o
   }
   return hist;
 }
+
+
+
+TGraphErrors *TCalibrator::SumEfficiencies(TGraphErrors *g1,TGraphErrors *g2) {
+
+  std::vector<double> xvals;
+  std::vector<double> yvals;
+  std::vector<double> xerr;
+  std::vector<double> yerr;
+
+  //TGraphErrors *g1 = (TGraphErrors*)cal1->EffGraph();
+  //TGraphErrors *g2 = (TGraphErrors*)cal2->EffGraph();
+  for(int x1=0;x1<g1->GetN();x1++) {
+    for(int x2=0;x2<g2->GetN();x2++) {
+      if( (*(g1->GetX()+x1)) == (*(g2->GetX()+x2)) ) {
+        xvals.push_back((*(g1->GetX()+x1)));
+        yvals.push_back((*(g1->GetY()+x1))+(*(g2->GetY()+x2)));
+        xerr.push_back((*(g1->GetEX()+x1))+(*(g2->GetEX()+x2)));
+        yerr.push_back((*(g1->GetEY()+x1))+(*(g2->GetEY()+x2)));
+        break;
+      }
+    }
+  }
+  
+  TGraphErrors *sum = new TGraphErrors(xvals.size(),xvals.data(),yvals.data(),xerr.data(),yerr.data()); 
+
+  return sum;
+}
+
+
+
+
+
+
+
+
+
 
 
 

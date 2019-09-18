@@ -119,10 +119,10 @@ public:
    /////******  Added for the Cd Analysis! *********///////////
    void SortHits() { std::sort(fGriffinLowGainHits.begin(),fGriffinLowGainHits.end()); 
                      std::sort(fGriffinHighGainHits.begin(),fGriffinHighGainHits.end()); }
-   void CleanHits(Short_t k=649) {  
+   void CleanHits(Short_t k1=649, Short_t k2=0, Short_t k3=0) {  
      std::vector<TGriffinHit>::iterator it;
      for(it=fGriffinLowGainHits.begin();it!=fGriffinLowGainHits.end(); ) {
-       if(it->GetKValue()==k) {
+       if(it->GetKValue()==k1 || it->GetKValue()==k2 || it->GetKValue()==k3) {
          it++;
        } else {
          fGriffinLowGainHits.erase(it);

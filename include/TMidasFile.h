@@ -46,6 +46,7 @@ public:
    using TObject::Write;
 #ifndef __CINT__
    int Read(std::shared_ptr<TRawEvent> event) override; ///< Read one event from the file
+   int Read(TRawEvent *event);                        ///< Read one event from the file
    bool Write(const std::shared_ptr<TMidasEvent>& midasEvent,
               Option_t*                           opt = ""); ///< Write one event to the output file
 #endif

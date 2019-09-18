@@ -653,12 +653,21 @@ bool GCanvas::Process1DKeyboardPress(Event_t*, UInt_t* keysym)
 
    case kKey_B: edited = CycleBackgroundSubtraction(); break;
 
-   case kKey_d: {
-      printf("i am here.\n");
-      new GPopup(gClient->GetDefaultRoot(), gClient->GetDefaultRoot(), 500, 200);
-
-   } break;
-
+   case kKey_d: 
+      if(!hists.back() || fMarkers.size()!=4) {
+        printf( CYAN "must have a a1 hist with 4 markers drawn" RESET_COLOR "\n");
+      } else  {
+        std::vector<double> xvalues;
+        xvalues.push_back(fMarkers.at(0)->localx);
+        xvalues.push_back(fMarkers.at(1)->localx);
+        xvalues.push_back(fMarkers.at(2)->localx);
+        xvalues.push_back(fMarkers.at(3)->localx);
+        RemoveMarker("all");
+        std::sort(xvalues.begin(),xvalues.end());
+        //std::cout << xvalues.at(1)<<"\t"<<xvalues.at(2)<<"\t"<<xvalues.at(0)<<"\t"<<xvalues.at(3)<<std::endl;
+        edited = DoubleGausFit(hists.back(),xvalues.at(1),xvalues.at(2),xvalues.at(0),xvalues.at(3));
+      }
+      break;
    case kKey_e:
       if(GetNMarkers() < 2) {
          break;
@@ -768,6 +777,18 @@ bool GCanvas::Process1DKeyboardPress(Event_t*, UInt_t* keysym)
          printf(RESET_COLOR);
       }
       break;
+
+   case kKey_k:
+      if(!hists.empty() && GetNMarkers() > 1) {
+         // printf("x low = %.1f\t\txhigh = %.1f\n",fMarkers.at(fMarkers.size()-2)->localx,fMarkers.back()->localx);
+         if(PhotoPeakFitNormBG(hists.back(), fMarkers.at(fMarkers.size() - 2)->localx, fMarkers.back()->localx) != nullptr) {
+            edited = true;
+         }
+      }
+      break;
+
+
+
    case kKey_l:
       if(GetLogy() != 0) {
          // Show full y range, not restricted to positive values.

@@ -25,7 +25,7 @@ std::string& TNucleus::massfile()
 }
 // const char *TNucleus::massfile = mfile.c_str();
 
-TNucleus::TNucleus(const char* name)
+TNucleus::TNucleus(const char* name,const char *sou_file)
 {
 	// Creates a nucleus based on symbol (ex. 26Na OR Na26) and sets all parameters from mass.dat
 	std::string Name = name;
@@ -115,7 +115,10 @@ TNucleus::TNucleus(const char* name)
 	SetName();
 	// SetName(element.c_str());
 	// SetSourceData();
-	LoadTransitionFile();
+        if(strlen(sou_file)) 
+	  LoadTransitionFile(sou_file);
+        else
+	  LoadTransitionFile();
 }
 /*
 */
@@ -460,11 +463,9 @@ void TNucleus::WriteSourceFile(const std::string& outfilename)
 	}
 }
 
+
 bool TNucleus::LoadTransitionFile()
 {
-	if(TransitionList.GetSize() != 0) {
-		return false;
-	}
 	std::string filename;
 	filename           = std::string(getenv("GRSISYS")) + "/libraries/TGRSIAnalysis/SourceData/";
 	std::string symbol = GetSymbol();
@@ -472,6 +473,16 @@ bool TNucleus::LoadTransitionFile()
 	filename.append(symbol);
 	filename.append(std::to_string(GetA()));
 	filename.append(".sou");
+
+  LoadTransitionFile(filename.c_str());
+}
+
+bool TNucleus::LoadTransitionFile(const char *fname)
+{
+	if(TransitionList.GetSize() != 0) {
+		return false;
+	}
+	std::string filename = fname;
 	std::ifstream transfile;
 	transfile.open(filename.c_str());
 	if(!transfile.is_open()) {

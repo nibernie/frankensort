@@ -40,6 +40,9 @@
 #include "TEpicsFrag.h"
 #include "TGRSIOptions.h"
 
+//#include "TMidasEvent.h"
+class TMidasEvent;
+
 class TDataParser {
 public:
    TDataParser();
@@ -146,9 +149,13 @@ public:
    void Push(ThreadsafeQueue<std::shared_ptr<const TBadFragment>>& queue, const std::shared_ptr<TBadFragment>& frag);
 #endif
 
+   std::vector<uint32_t> CleanGriffinData(uint32_t *data, int size);
+
    int TigressDataToFragment(uint32_t* data, int size, unsigned int midasSerialNumber = 0, time_t midasTime = 0);
    int GriffinDataToFragment(uint32_t* data, int size, EBank bank, unsigned int midasSerialNumber = 0,
                              time_t midasTime = 0);
+   std::vector<TFragment> GriffinDataToFragment(TMidasEvent *event);
+
    int GriffinDataToPPGEvent(uint32_t* data, int size, unsigned int midasSerialNumber = 0, time_t midasTime = 0);
    int GriffinDataToScalerEvent(uint32_t* data, int address);
 
